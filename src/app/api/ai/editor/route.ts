@@ -1,5 +1,6 @@
-import { generateText, tool } from "ai";
+import { streamText, tool } from "ai";
 
+import { toModelMessages } from "@/lib/ai/messages";
 import { itineraryTools } from "@/lib/ai/tools";
 import { model } from "@/lib/ai/openrouter";
 import { getRateLimiter } from "@/lib/rate-limit";
@@ -26,16 +27,18 @@ export async function POST(request: Request) {
     }
   }
 
-  const { messages } = (await request.json()) as {
-    messages: Array<{ role: "user" | "assistant"; content: string }>;
+  const { messages, tripId, userId } = (await request.json()) as {
+    messages: unknown;
+    tripId: string;
+    userId?: string;
   };
 
-  const conversation = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+  const modelMessages = await toModelMessages(messages);
 
-  const result = await generateText({
+  const result = streamText({
     model,
-    system: EDITOR_SYSTEM_PROMPT,
-    prompt: `Percakapan editor:\n${conversation}\n\nJawab dengan aksi yang diperlukan. Gunakan tools jika perlu.`,
+    system: `${EDITOR_SYSTEM_PROMPT}\nTrip ID aktif: ${tripId}\nUser ID aktif: ${userId ?? "unknown"}`,
+    messages: modelMessages,
     tools: {
       update_itinerary_item: tool(itineraryTools.update_itinerary_item),
       add_itinerary_item: tool(itineraryTools.add_itinerary_item),
@@ -50,5 +53,5 @@ export async function POST(request: Request) {
     },
   });
 
-  return Response.json({ text: result.text });
+  return result.toUIMessageStreamResponse();
 }

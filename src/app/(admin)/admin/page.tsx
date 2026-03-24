@@ -2,15 +2,19 @@ import Link from "next/link";
 
 import { AdminFlagQueue } from "@/components/admin/flag-queue";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { getAdminMetrics, getFlaggedQueue } from "@/lib/data";
+import { formatIdr } from "@/lib/utils";
 
-const cards = [
-  { title: "Trip Queue", value: "26 active", href: "/admin/trips" },
-  { title: "Flagged Items", value: "4 urgent", href: "/admin/flagged" },
-  { title: "Live Chat", value: "2 open", href: "/admin/chat" },
-  { title: "WhatsApp Center", value: "134 messages", href: "/admin/whatsapp" },
-];
+export default async function AdminHomePage() {
+  const [metrics, flaggedItems] = await Promise.all([getAdminMetrics(), getFlaggedQueue(8)]);
 
-export default function AdminHomePage() {
+  const cards = [
+    { title: "Trip Queue (30d)", value: `${metrics.tripVolume30d} trips`, href: "/admin/trips" },
+    { title: "Flagged Items", value: `${metrics.flaggedPending} pending`, href: "/admin/flagged" },
+    { title: "Live Chat", value: `${metrics.openChats} open`, href: "/admin/chat" },
+    { title: "Revenue", value: formatIdr(metrics.revenuePlanningFeeIdr), href: "/admin/analytics" },
+  ];
+
   return (
     <div className="space-y-4">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -27,7 +31,7 @@ export default function AdminHomePage() {
       <Card className="p-5">
         <CardTitle>CS Priorities</CardTitle>
         <div className="mt-3">
-          <AdminFlagQueue />
+          <AdminFlagQueue items={flaggedItems} compact />
         </div>
       </Card>
     </div>

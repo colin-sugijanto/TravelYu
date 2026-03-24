@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { searchIndonesiaPlaces } from "@/lib/ai/tavily";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isMajorChange } from "@/lib/utils";
 
@@ -163,7 +164,24 @@ export const itineraryTools = {
       }
 
       const { data } = await statement.limit(input.limit);
-      return { ok: true, alternatives: data ?? [] };
+      const internalAlternatives = data ?? [];
+
+      const searchQuery = input.city ? `${input.query} ${input.city}` : input.query;
+      const tavilyResults = await searchIndonesiaPlaces(searchQuery, input.limit);
+
+      const webAlternatives = tavilyResults.map((result, index) => ({
+        id: `web-${index + 1}`,
+        name: result.title,
+        type: "web_result",
+        city: input.city ?? "Indonesia",
+        price_tier: null,
+        avg_rating: null,
+        url: result.url,
+        snippet: result.content,
+        source: "web_search",
+      }));
+
+      return { ok: true, alternatives: [...internalAlternatives, ...webAlternatives] };
     },
   },
 

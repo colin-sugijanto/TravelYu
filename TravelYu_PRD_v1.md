@@ -335,8 +335,8 @@ Chat editor menggunakan Vercel AI SDK (`useChat` hook) dengan streaming response
 |---|---|
 | AI SDK | Vercel AI SDK (`ai` package) — `useChat`, `useUIState`, `streamText` |
 | Model Router | OpenRouter — endpoint: `https://openrouter.ai/api/v1` |
-| Primary Model | `anthropic/claude-3.5-sonnet` (tool calling + long context) |
-| Fallback Model | `openai/gpt-4o` (jika Sonnet overloaded) |
+| Primary Model | `stepfun/step-3.5-flash:free` (tool calling + long context) |
+| Fallback Model | - (MVP single-model via OpenRouter) |
 | Web Search | Tavily API — `search_indonesia_places` tool |
 | Orchestration | Pure Vercel AI SDK tool calling — tidak menggunakan LangChain/LangGraph |
 | Streaming | React Server Components + AI SDK streaming untuk real-time response |
@@ -383,7 +383,7 @@ export const openrouter = createOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-export const model = openrouter('anthropic/claude-3.5-sonnet');
+export const model = openrouter('stepfun/step-3.5-flash:free');
 ```
 
 ---
@@ -498,7 +498,7 @@ export const model = openrouter('anthropic/claude-3.5-sonnet');
 | Midtrans | Payment QRIS + GoPay | Node.js SDK; webhook di `/api/payment/midtrans-webhook` |
 | Supabase Storage | Photo memory wall uploads | `supabase.storage.from('trip-photos').upload()` |
 | Tavily API | Web search untuk destinasi + vendor | Tool call: `search_indonesia_places(query)` |
-| OpenRouter | AI model routing (Claude/GPT-4o) | Vercel AI SDK `createOpenAI` dengan custom `baseURL` |
+| OpenRouter | AI model routing (Stepfun) | Vercel AI SDK `createOpenAI` dengan custom `baseURL` |
 | WAHA (WhatsApp) | Notifikasi user + kontak vendor | REST API: `POST /api/sendText`; self-hosted Docker |
 | OpenWeatherMap | Weather check per destinasi + tanggal | Tool call: `get_weather_info(city, date_range)` |
 | Mapbox / Leaflet | Map display di itinerary viewer | Client-side React component; pins dari lat/lng DB |

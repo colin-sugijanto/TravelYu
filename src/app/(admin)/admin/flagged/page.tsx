@@ -1,5 +1,7 @@
 import { AdminFlagQueue } from "@/components/admin/flag-queue";
+import { getFlaggedQueue } from "@/lib/data";
 
-export default function AdminFlaggedPage() {
-  return <AdminFlagQueue />;
+export default async function AdminFlaggedPage() {
+  const items = await getFlaggedQueue();
+  return <AdminFlagQueue items={items} />;
 }

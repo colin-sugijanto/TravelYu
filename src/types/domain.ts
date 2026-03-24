@@ -97,9 +97,64 @@ export interface ItineraryItem {
 export interface UserProfile {
   id: string;
   full_name: string | null;
+  email?: string | null;
   whatsapp_number: string | null;
+  travel_preferences?: {
+    vibe?: string[];
+    budget_tier?: string;
+  } | null;
   role: UserRole;
   points_balance: number;
   lifetime_points: number;
   loyalty_tier: LoyaltyTier;
+}
+
+export interface VendorSummary {
+  id: string;
+  name: string;
+  type: string;
+  city: string;
+  whatsapp_number: string | null;
+  is_verified: boolean;
+}
+
+export interface TripPhoto {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  storage_path: string;
+  public_url?: string;
+  caption: string | null;
+  uploaded_at: string;
+}
+
+export interface FlaggedQueueItem {
+  id: string;
+  trip_id: string;
+  item_id: string | null;
+  status: "pending" | "approved" | "rejected" | "edited_manual";
+  requested_change: Record<string, unknown> | null;
+  reviewed_at: string | null;
+  created_at: string;
+  trip_public_id: string;
+  item_title: string | null;
+}
+
+type ChatRole = "user" | "assistant" | "cs";
+
+export interface CSChatMessage {
+  role: ChatRole;
+  content: string;
+  ts: string;
+}
+
+export interface CSChatSession {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  cs_id: string | null;
+  status: "open" | "resolved";
+  messages: CSChatMessage[];
+  created_at: string;
+  updated_at: string;
 }

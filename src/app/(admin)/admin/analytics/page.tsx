@@ -1,13 +1,17 @@
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { getAdminMetrics } from "@/lib/data";
+import { formatIdr } from "@/lib/utils";
 
-const metrics = [
-  { label: "Trip Volume (30d)", value: "148" },
-  { label: "Revenue Planning Fee", value: "IDR 19.7M" },
-  { label: "CS Intervention Rate", value: "18%" },
-  { label: "Avg Satisfaction", value: "4.4 / 5" },
-];
+export default async function AdminAnalyticsPage() {
+  const metricsData = await getAdminMetrics();
 
-export default function AdminAnalyticsPage() {
+  const metrics = [
+    { label: "Trip Volume (30d)", value: `${metricsData.tripVolume30d}` },
+    { label: "Revenue Planning Fee", value: formatIdr(metricsData.revenuePlanningFeeIdr) },
+    { label: "CS Intervention Rate", value: `${metricsData.csInterventionRate}%` },
+    { label: "Avg Satisfaction", value: metricsData.avgSatisfaction ? `${metricsData.avgSatisfaction.toFixed(1)} / 5` : "No data" },
+  ];
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {metrics.map((metric) => (

@@ -1,6 +1,7 @@
 import { generateText, tool } from "ai";
 import { z } from "zod";
 
+import { searchIndonesiaPlaces } from "@/lib/ai/tavily";
 import { model } from "@/lib/ai/openrouter";
 import { resolveTripRecipient, sendTravelYuNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -57,24 +58,63 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     tripId: string;
-    intakeData: Record<string, unknown>;
+    intakeData?: Record<string, unknown>;
   };
+
+  if (!body.tripId) {
+    return Response.json({ error: "tripId is required" }, { status: 400 });
+  }
+
+  const { data: trip, error: tripError } = await supabaseAdmin
+    .from("trips")
+    .select("id,intake_data,payment_status,selected_comparison_option")
+    .eq("id", body.tripId)
+    .single();
+
+  if (tripError || !trip) {
+    return Response.json({ error: "Trip not found" }, { status: 404 });
+  }
+
+  if (trip.payment_status !== "paid") {
+    return Response.json({ error: "Payment must be completed before itinerary generation" }, { status: 400 });
+  }
 
   await supabaseAdmin.from("trips").update({ status: "generating" }).eq("id", body.tripId);
 
+  const intakeData = body.intakeData ?? ((trip.intake_data as Record<string, unknown> | null) ?? {});
+  const comparisonOption = trip.selected_comparison_option ?? 1;
+
   const result = await generateText({
     model,
+    system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
     prompt: `
 You are TravelYu itinerary generation engine.
 
 Trip ID: ${body.tripId}
-Intake data: ${JSON.stringify(body.intakeData)}
+Intake data: ${JSON.stringify(intakeData)}
+Selected comparison option: ${comparisonOption}
 
 Generate a 3-5 day itinerary with complete item fields.
 After generation, call save_itinerary tool with structured payload.
+
+If you need fresh activity ideas, use search_indonesia_places tool.
 `,
     tools: {
       save_itinerary: saveItineraryTool,
+      search_indonesia_places: tool({
+        description: "Search Indonesian places, attractions, restaurants, and activities.",
+        inputSchema: z.object({
+          query: z.string(),
+          limit: z.number().int().min(1).max(8).default(5),
+        }),
+        execute: async ({ query, limit }) => {
+          const results = await searchIndonesiaPlaces(query, limit);
+          return {
+            ok: true,
+            results,
+          };
+        },
+      }),
     },
   });
 

@@ -1,36 +1,146 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Card, CardTitle } from "@/components/ui/card";
+import { supabaseRealtime } from "@/lib/realtime";
+import type { CSChatSession } from "@/types/domain";
 
-const initialMessages = [
-  { from: "user", text: "Halo, saya mau ubah hotel untuk malam terakhir" },
-  { from: "cs", text: "Siap, kami cek ketersediaan vendor dulu ya." },
-];
+interface CSChatPanelProps {
+  initialSessions: CSChatSession[];
+}
 
-export function CSChatPanel() {
-  const [messages, setMessages] = useState(initialMessages);
+function extractSessionMessages(session: CSChatSession | null) {
+  if (!session) return [];
+  return Array.isArray(session.messages) ? session.messages : [];
+}
+
+function formatTs(ts: string) {
+  return new Date(ts).toLocaleString("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+export function CSChatPanel({ initialSessions }: CSChatPanelProps) {
+  const [sessions, setSessions] = useState(initialSessions);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(initialSessions[0]?.id ?? null);
   const [value, setValue] = useState("");
 
+  useEffect(() => {
+    const channel = supabaseRealtime
+      .channel("admin-cs-chat")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "cs_chat_sessions",
+        },
+        (payload) => {
+          const row = payload.new as CSChatSession;
+          if (!row?.id) return;
+
+          setSessions((prev) => {
+            const existing = prev.find((session) => session.id === row.id);
+            if (!existing) return [row, ...prev];
+            return prev.map((session) => (session.id === row.id ? row : session));
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabaseRealtime.removeChannel(channel);
+    };
+  }, []);
+
+  const activeSession = useMemo(
+    () => sessions.find((session) => session.id === activeSessionId) ?? null,
+    [activeSessionId, sessions],
+  );
+
+  const messages = extractSessionMessages(activeSession);
+
+  const sendReply = async () => {
+    if (!activeSession || !value.trim()) return;
+
+    const newMessage = {
+      role: "cs" as const,
+      content: value.trim(),
+      ts: new Date().toISOString(),
+    };
+
+    const nextMessages = [...messages, newMessage];
+    setValue("");
+
+    await fetch(`/api/admin/chat/${encodeURIComponent(activeSession.id)}/reply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: newMessage.content,
+      }),
+    });
+
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === activeSession.id
+          ? {
+              ...session,
+              messages: nextMessages,
+              updated_at: new Date().toISOString(),
+            }
+          : session,
+      ),
+    );
+  };
+
   return (
-    <Card className="flex h-[540px] flex-col p-4">
+    <Card className="grid h-[560px] gap-4 p-4 md:grid-cols-[300px_1fr]">
+      <div className="overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-alt)] p-2">
+        <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-soft)]">Open Sessions</p>
+        <div className="space-y-2">
+          {sessions.length === 0 ? <p className="px-2 text-sm text-[var(--text-soft)]">No open chat session.</p> : null}
+
+          {sessions.filter((session) => session.status === "open").map((session) => (
+            <button
+              key={session.id}
+              type="button"
+              onClick={() => setActiveSessionId(session.id)}
+              className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                activeSessionId === session.id ? "border-[var(--brand)] bg-white" : "border-[var(--border)] bg-white/70"
+              }`}
+            >
+              <p className="font-semibold">Trip {session.trip_id.slice(0, 8)}</p>
+              <p className="text-xs text-[var(--text-soft)]">Updated {formatTs(session.updated_at)}</p>
+            </button>
+          ))}
+
+          {sessions.filter((session) => session.status === "open").length === 0 ? <p className="px-2 text-sm text-[var(--text-soft)]">No open sessions.</p> : null}
+        </div>
+      </div>
+
+      <div className="flex h-full flex-col">
       <CardTitle>Live Chat Sessions</CardTitle>
       <div className="mt-3 flex-1 space-y-2 overflow-y-auto rounded-xl bg-[var(--bg-alt)] p-3">
         {messages.map((message, idx) => (
-          <div key={`${message.from}-${idx}`} className={message.from === "cs" ? "rounded-xl bg-[#d9efe4] p-2 text-sm" : "rounded-xl bg-white p-2 text-sm"}>
-            {message.text}
+          <div
+            key={`${message.role}-${idx}-${message.ts}`}
+            className={message.role === "cs" ? "rounded-xl bg-[#d9efe4] p-2 text-sm" : "rounded-xl bg-white p-2 text-sm"}
+          >
+            <p>{message.content}</p>
+            <p className="mt-1 text-[10px] uppercase text-[var(--text-soft)]">{formatTs(message.ts)}</p>
           </div>
         ))}
+
+        {activeSession === null ? <p className="text-sm text-[var(--text-soft)]">Pilih session untuk mulai membalas.</p> : null}
       </div>
 
       <form
         className="mt-3 flex gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!value.trim()) return;
-          setMessages((prev) => [...prev, { from: "cs", text: value }]);
-          setValue("");
+          void sendReply();
         }}
       >
         <input
@@ -38,11 +148,17 @@ export function CSChatPanel() {
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Balas user..."
+          disabled={!activeSession}
         />
-        <button type="submit" className="rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)]">
+        <button
+          type="submit"
+          disabled={!activeSession}
+          className="rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
           Send
         </button>
       </form>
+      </div>
     </Card>
   );
 }

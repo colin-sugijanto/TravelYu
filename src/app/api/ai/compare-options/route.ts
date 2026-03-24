@@ -53,6 +53,20 @@ export async function POST(request: Request) {
     intakeSummary: string;
   };
 
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,intake_data").eq("id", body.tripId).maybeSingle();
+  if (trip) {
+    await supabaseAdmin
+      .from("trips")
+      .update({
+        intake_data: {
+          ...((trip.intake_data as Record<string, unknown> | null) ?? {}),
+          summary: body.intakeSummary,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", body.tripId);
+  }
+
   const result = await generateText({
     model,
     prompt: `
@@ -62,6 +76,12 @@ Trip ID: ${body.tripId}
 Intake Summary: ${body.intakeSummary}
 
 Call save_comparison_options with structured options.
+
+Constraints:
+- Opsi 1 harus budget-focused.
+- Opsi 2 harus balanced.
+- Opsi 3 harus premium-experience.
+- Semua destinasi wajib di Indonesia.
 `,
     tools: {
       save_comparison_options: compareTool,

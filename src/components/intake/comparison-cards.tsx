@@ -1,20 +1,47 @@
+"use client";
+
+import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { formatIdr } from "@/lib/utils";
 import type { ComparisonOption } from "@/types/domain";
 
 interface ComparisonCardsProps {
+  tripId: string;
   options: ComparisonOption[];
 }
 
-export function ComparisonCards({ options }: ComparisonCardsProps) {
+export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
+  const [selectedOption, setSelectedOption] = useState<number | null>(options.find((option) => option.is_selected)?.option_number ?? null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const selectOption = async (optionNumber: number) => {
+    if (isSaving) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/select-option`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ optionNumber }),
+      });
+
+      if (response.ok) {
+        setSelectedOption(optionNumber);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       {options.map((option) => (
         <Card key={option.id} className="p-5">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base">{option.summary.title}</CardTitle>
-            <Badge tone={option.is_selected ? "brand" : "neutral"}>{option.is_selected ? "Selected" : `Option ${option.option_number}`}</Badge>
+            <Badge tone={selectedOption === option.option_number ? "brand" : "neutral"}>{selectedOption === option.option_number ? "Selected" : `Option ${option.option_number}`}</Badge>
           </div>
 
           <CardText className="mt-2">{option.summary.rationale}</CardText>
@@ -35,11 +62,23 @@ export function ComparisonCards({ options }: ComparisonCardsProps) {
             ))}
           </ul>
 
-          <button className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)]">
-            Pilih Opsi Ini
+          <button
+            type="button"
+            onClick={() => selectOption(option.option_number)}
+            disabled={isSaving}
+            className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {selectedOption === option.option_number ? "Opsi Terpilih" : "Pilih Opsi Ini"}
           </button>
         </Card>
       ))}
+
+      {options.length === 0 ? (
+        <Card className="p-5 lg:col-span-3">
+          <CardTitle>Belum ada opsi comparison</CardTitle>
+          <CardText className="mt-2">Selesaikan intake lalu klik generate comparison options.</CardText>
+        </Card>
+      ) : null}
     </div>
   );
 }

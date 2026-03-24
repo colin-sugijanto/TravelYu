@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
@@ -11,13 +12,17 @@ interface QrisPaymentProps {
 }
 
 export function QRISPayment({ tripId, amount }: QrisPaymentProps) {
+  const router = useRouter();
   const [seconds, setSeconds] = useState(15 * 60);
   const [isCreating, setIsCreating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<"pending" | "paid" | "failed">("pending");
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const requestQris = useCallback(async () => {
     setIsCreating(true);
+    setErrorMessage(null);
     try {
       const response = await fetch("/api/payment/create-qris", {
         method: "POST",
@@ -32,15 +37,42 @@ export function QRISPayment({ tripId, amount }: QrisPaymentProps) {
       const payload = await response.json();
       if (response.ok) {
         setOrderId(payload.orderId ?? null);
+        setStatus("pending");
       } else {
         setStatus("failed");
+        setErrorMessage(payload.error ?? "Gagal membuat QRIS. Coba lagi.");
       }
     } catch {
       setStatus("failed");
+      setErrorMessage("Gagal terhubung ke payment service.");
     } finally {
       setIsCreating(false);
     }
   }, [amount, tripId]);
+
+  const generateTrip = async () => {
+    if (isGenerating) return;
+
+    setIsGenerating(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/generate`, {
+        method: "POST",
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        setErrorMessage(payload.error ?? "Gagal generate itinerary.");
+        return;
+      }
+
+      router.push(`/trip/${encodeURIComponent(tripId)}`);
+    } catch {
+      setErrorMessage("Gagal generate itinerary.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   useEffect(() => {
     void requestQris();
@@ -94,6 +126,19 @@ export function QRISPayment({ tripId, amount }: QrisPaymentProps) {
       <div className="mt-3 rounded-lg bg-[var(--bg-alt)] px-3 py-2 text-xs text-[var(--text-soft)]">
         Payment status: <span className="font-semibold uppercase">{status}</span>
       </div>
+
+      {errorMessage ? <p className="mt-2 text-xs text-[var(--danger)]">{errorMessage}</p> : null}
+
+      {status === "paid" ? (
+        <button
+          type="button"
+          onClick={generateTrip}
+          disabled={isGenerating}
+          className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-full bg-[var(--brand)] text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isGenerating ? "Generating..." : "Payment confirmed - Generate itinerary"}
+        </button>
+      ) : null}
 
       <button
         className="mt-3 h-10 w-full rounded-full border border-[var(--border)] bg-white text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--bg-alt)]"

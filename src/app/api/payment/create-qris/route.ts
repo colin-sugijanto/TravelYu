@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 
 import { createQrisPayment } from "@/lib/payment";
+import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
@@ -14,6 +15,24 @@ export async function POST(request: Request) {
     customerName: string;
     customerEmail: string;
   };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").eq("id", body.tripId).maybeSingle();
+  if (!trip) {
+    return Response.json({ error: "Trip not found" }, { status: 404 });
+  }
+
+  if (trip.user_id !== user.id) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const orderId = `TRAVELYU-${nanoid(10).toUpperCase()}`;
   const payment = await createQrisPayment({

@@ -1,12 +1,24 @@
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { getProfile } from "@/lib/data";
+import { formatIdr } from "@/lib/utils";
+import { RedeemPointsButton } from "@/components/loyalty/redeem-points-button";
 
-export default function ReferralPage() {
+function rewardFromPoints(points: number) {
+  if (points >= 1000) return "Free planning fee available";
+  if (points >= 500) return `Eligible for ${formatIdr(50000)} planning fee discount`;
+  return `${500 - points} points lagi untuk diskon ${formatIdr(50000)}`;
+}
+
+export default async function ReferralPage() {
+  const profile = await getProfile();
+  const referralCode = `TRAVELYU-${(profile.full_name ?? "traveler").replace(/\s+/g, "-").toUpperCase()}`;
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="p-5">
         <CardTitle>Referral Program</CardTitle>
         <CardText className="mt-2">Dapatkan 25 poin untuk setiap referral signup yang valid.</CardText>
-        <div className="mt-3 rounded-lg bg-[var(--bg-alt)] p-3 text-sm">Kode referral kamu: TRAVELYU-RAMA-26</div>
+        <div className="mt-3 rounded-lg bg-[var(--bg-alt)] p-3 text-sm">Kode referral kamu: {referralCode}</div>
       </Card>
 
       <Card className="p-5">
@@ -16,6 +28,13 @@ export default function ReferralPage() {
           <li>1000 poin = free planning fee</li>
           <li>Wanderer tier dapat priority CS + early deals</li>
         </ul>
+        <div className="mt-4 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm">
+          Status kamu: <span className="font-semibold">{profile.loyalty_tier}</span> · {rewardFromPoints(profile.points_balance)}
+        </div>
+
+        <div className="mt-3">
+          <RedeemPointsButton points={profile.points_balance} />
+        </div>
       </Card>
     </div>
   );

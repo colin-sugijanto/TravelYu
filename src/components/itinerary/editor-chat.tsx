@@ -1,66 +1,80 @@
 "use client";
 
+import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
+import { DefaultChatTransport } from "ai";
 
 import { Card, CardTitle } from "@/components/ui/card";
 
-type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-};
+function extractTextFromParts(parts: Array<{ type: string; text?: string }>) {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("\n")
+    .trim();
+}
 
-export function EditorChat({ tripId }: { tripId: string }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+function normalizeMessages(
+  messages: Array<{
+    id: string;
+    role: "assistant" | "user" | "system";
+    parts: Array<{ type: string; text?: string }>;
+  }>,
+) {
+  return messages
+    .filter((message) => message.role === "assistant" || message.role === "user")
+    .map((message) => ({
+      ...message,
+      role: message.role as "assistant" | "user",
+      parts: message.parts,
+    }));
+}
+
+export function EditorChat({
+  tripId,
+  userId,
+}: {
+  tripId: string;
+  userId?: string;
+}) {
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/ai/editor",
+      body: {
+        tripId,
+        userId,
+      },
+    }),
+  });
+
+  const isLoading = status === "submitted" || status === "streaming";
+  const normalizedMessages = normalizeMessages(
+    messages as Array<{
+      id: string;
+      role: "assistant" | "user" | "system";
+      parts: Array<{ type: string; text?: string }>;
+    }>,
+  );
 
   const send = async () => {
     if (!input.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: input,
-    };
-
-    const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages);
+    const text = input;
     setInput("");
-    setIsLoading(true);
-
-    try {
-      const response = await fetch("/api/ai/editor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tripId, messages: nextMessages }),
-      });
-
-      const payload = await response.json();
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: payload.text ?? "Maaf, ada gangguan saat memproses edit itinerary.",
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+    await sendMessage({ text });
   };
 
   return (
     <Card className="flex h-[540px] flex-col p-4">
       <CardTitle>AI Editor</CardTitle>
       <div className="mt-3 flex-1 space-y-2 overflow-y-auto rounded-xl bg-[var(--bg-alt)] p-3">
-        {messages.length === 0 ? (
+        {normalizedMessages.length === 0 ? (
           <p className="text-sm text-[var(--text-soft)]">Contoh: &quot;Tukar resto hari 2 ke opsi vegetarian yang lebih dekat&quot;</p>
         ) : (
-          messages.map((message) => (
+          normalizedMessages.map((message) => (
             <div key={message.id} className={message.role === "user" ? "rounded-xl bg-[#d9efe4] p-2 text-sm" : "rounded-xl bg-white p-2 text-sm"}>
-              {message.content}
+              {extractTextFromParts(message.parts)}
             </div>
           ))
         )}

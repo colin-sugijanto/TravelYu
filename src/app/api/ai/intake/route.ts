@@ -1,5 +1,6 @@
-import { generateText } from "ai";
+import { streamText } from "ai";
 
+import { toModelMessages } from "@/lib/ai/messages";
 import { model } from "@/lib/ai/openrouter";
 import { getRateLimiter } from "@/lib/rate-limit";
 
@@ -26,17 +27,18 @@ export async function POST(request: Request) {
     }
   }
 
-  const { messages } = (await request.json()) as {
-    messages: Array<{ role: "user" | "assistant"; content: string }>;
+  const { messages, mode } = (await request.json()) as {
+    messages: unknown;
+    mode?: "standard" | "surprise";
   };
 
-  const conversation = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+  const modelMessages = await toModelMessages(messages);
 
-  const result = await generateText({
+  const result = streamText({
     model,
-    system: INTAKE_SYSTEM_PROMPT,
-    prompt: `Percakapan sejauh ini:\n${conversation}\n\nBalas sebagai intake agent untuk pertanyaan berikutnya atau ringkasan jika 7 parameter sudah lengkap.`,
+    system: `${INTAKE_SYSTEM_PROMPT}\nMode trip saat ini: ${mode === "surprise" ? "Surprise Me" : "Standard"}.`,
+    messages: modelMessages,
   });
 
-  return Response.json({ text: result.text });
+  return result.toUIMessageStreamResponse();
 }
