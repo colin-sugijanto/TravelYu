@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f7f8f2;
+  --bg-alt: #edf0df;
+  --card: #ffffff;
+  --text: #173528;
+  --text-soft: #456a59;
+  --brand: #2f8f6b;
+  --brand-strong: #136346;
+  --sun: #f6b63f;
+  --danger: #c13e3e;
+  --border: #d5dfd1;
+  --ring: #2f8f6b;
+  --radius: 16px;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-space-mono);
+}
+
+body {
+  background:
+    radial-gradient(circle at 0% 0%, #f8ebcd 0, transparent 32%),
+    radial-gradient(circle at 100% 0%, #dce8d2 0, transparent 34%),
+    linear-gradient(180deg, var(--bg), #f4f7ef);
+  color: var(--text);
+  font-family: var(--font-manrope), sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+.surface {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow:
+    0 8px 20px rgba(19, 99, 70, 0.07),
+    0 2px 0 rgba(255, 255, 255, 0.6) inset;
+}
+
+.section-glow {
+  position: relative;
+}
+
+.section-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(47, 143, 107, 0.2), rgba(246, 182, 63, 0.17));
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: xor;
+  padding: 1px;
+}
