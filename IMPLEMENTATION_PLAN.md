@@ -47,5 +47,5 @@ Status legend: `[ ]` pending, `[~]` in progress, `[x]` done
 - [x] Update docs (README, env example, setup guide)
 - [x] Run lint/build sanity checks
 - [x] Initialize git in this folder
-- [ ] Create private GitHub repo and add remote
-- [ ] Commit and push full implementation
+- [x] Create private GitHub repo and add remote
+- [x] Commit and push full implementation
