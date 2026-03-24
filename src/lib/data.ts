@@ -53,20 +53,30 @@ export async function getTripById(tripId: string): Promise<Trip | null> {
     return mockTrips.find((trip) => trip.id === tripId || trip.public_id === tripId) ?? null;
   }
 
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tripId);
+
   try {
     const supabase = await createClient();
-    const { data } = await supabase.from("trips").select("*").or(`id.eq.${tripId},public_id.eq.${tripId}`).limit(1);
-    if (!data || data.length === 0) {
-      const { data: adminTrip } = await supabaseAdmin.from("trips").select("*").or(`id.eq.${tripId},public_id.eq.${tripId}`).limit(1);
-      if (!adminTrip || adminTrip.length === 0) return null;
-      return adminTrip[0] as Trip;
-    }
-    return data[0] as Trip;
+    const userQuery = isUuid
+      ? await supabase.from("trips").select("*").eq("id", tripId).maybeSingle()
+      : await supabase.from("trips").select("*").eq("public_id", tripId).maybeSingle();
+
+    if (userQuery.data) return userQuery.data as Trip;
+
+    const adminQuery = isUuid
+      ? await supabaseAdmin.from("trips").select("*").eq("id", tripId).maybeSingle()
+      : await supabaseAdmin.from("trips").select("*").eq("public_id", tripId).maybeSingle();
+
+    if (!adminQuery.data) return null;
+    return adminQuery.data as Trip;
   } catch {
     try {
-      const { data } = await supabaseAdmin.from("trips").select("*").or(`id.eq.${tripId},public_id.eq.${tripId}`).limit(1);
-      if (!data || data.length === 0) return null;
-      return data[0] as Trip;
+      const adminQuery = isUuid
+        ? await supabaseAdmin.from("trips").select("*").eq("id", tripId).maybeSingle()
+        : await supabaseAdmin.from("trips").select("*").eq("public_id", tripId).maybeSingle();
+
+      if (!adminQuery.data) return null;
+      return adminQuery.data as Trip;
     } catch {
       return null;
     }

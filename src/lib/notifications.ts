@@ -91,7 +91,7 @@ export async function sendTravelYuNotification(payload: TravelYuNotificationPayl
   };
 
   if (process.env.N8N_NOTIFICATION_WEBHOOK_TOKEN) {
-    headers["x-travelyu-token"] = process.env.N8N_NOTIFICATION_WEBHOOK_TOKEN;
+    headers["Authorization"] = process.env.N8N_NOTIFICATION_WEBHOOK_TOKEN;
   }
 
   try {
@@ -108,17 +108,24 @@ export async function sendTravelYuNotification(payload: TravelYuNotificationPayl
 }
 
 export async function resolveTripRecipient(tripId: string): Promise<TripRecipient | null> {
-  const { data: trip } = await supabaseAdmin
-    .from("trips")
-    .select("id,user_id,users(full_name,whatsapp_number)")
-    .eq("id", tripId)
-    .maybeSingle();
+  let tripQuery = await supabaseAdmin.from("trips").select("id,user_id").eq("id", tripId).maybeSingle();
+
+  if (!tripQuery.data) {
+    tripQuery = await supabaseAdmin.from("trips").select("id,user_id").eq("public_id", tripId).maybeSingle();
+  }
+
+  const trip = tripQuery.data;
 
   if (!trip) return null;
 
-  const userRelation = Array.isArray(trip.users) ? trip.users[0] : trip.users;
-  const userName = (userRelation?.full_name as string | null | undefined) ?? null;
-  const phoneE164 = normalizePhoneToE164((userRelation?.whatsapp_number as string | null | undefined) ?? null);
+  const { data: userRow } = await supabaseAdmin
+    .from("users")
+    .select("full_name,whatsapp_number")
+    .eq("id", trip.user_id as string)
+    .maybeSingle();
+
+  const userName = (userRow?.full_name as string | null | undefined) ?? null;
+  const phoneE164 = normalizePhoneToE164((userRow?.whatsapp_number as string | null | undefined) ?? null);
 
   let email: string | null = null;
   const authResult = await supabaseAdmin.auth.admin.getUserById(trip.user_id as string);
