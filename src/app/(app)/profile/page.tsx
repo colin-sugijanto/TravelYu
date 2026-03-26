@@ -1,6 +1,7 @@
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { getCurrentAppUser } from "@/lib/auth";
 import { getProfile } from "@/lib/data";
-import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 async function updateProfile(formData: FormData) {
   "use server";
@@ -10,19 +11,15 @@ async function updateProfile(formData: FormData) {
   const vibe = String(formData.get("vibe") ?? "").trim();
   const budgetTier = String(formData.get("budgetTier") ?? "").trim();
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return;
+  const appUser = await getCurrentAppUser();
+  if (!appUser) return;
 
   const vibes = vibe
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
 
-  await supabase
+  await supabaseAdmin
     .from("users")
     .update({
       full_name: fullName || null,
@@ -33,7 +30,7 @@ async function updateProfile(formData: FormData) {
       },
       updated_at: new Date().toISOString(),
     })
-    .eq("id", user.id);
+    .eq("id", appUser.id);
 }
 
 export default async function ProfilePage() {

@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(
   request: Request,
@@ -11,21 +12,16 @@ export async function POST(
     return Response.json({ error: "content is required" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase.from("users").select("role").eq("id", user.id).single();
-  if (!profile || (profile.role !== "admin" && profile.role !== "super_admin")) {
+  if (!isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data: session } = await supabase
+  const { data: session } = await supabaseAdmin
     .from("cs_chat_sessions")
     .select("id,messages")
     .eq("id", sessionId)
@@ -45,10 +41,10 @@ export async function POST(
     },
   ];
 
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("cs_chat_sessions")
     .update({
-      cs_id: user.id,
+      cs_id: appUser.id,
       messages: nextMessages,
       updated_at: new Date().toISOString(),
     })

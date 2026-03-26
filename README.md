@@ -5,10 +5,11 @@ AI-assisted personal travel planning platform for Indonesian destinations.
 Stack:
 - Next.js 16 (App Router)
 - Tailwind CSS
-- Supabase (Auth + Postgres + RLS)
+- Clerk (Auth)
+- Supabase (Postgres + Storage + RLS)
 - Vercel AI SDK + OpenRouter
-- Midtrans (QRIS)
-- n8n (Gmail + Evolution API notifications)
+- MapTiler API (map rendering)
+- n8n (Gmail + Evolution API for email + WhatsApp)
 
 ## Implemented Scope (MVP baseline)
 
@@ -21,15 +22,9 @@ Stack:
   - `POST /api/ai/editor`
   - `POST /api/ai/compare-options`
   - `POST /api/ai/generate-trip`
-- Payment endpoints:
-  - `POST /api/payment/create-qris`
-  - `POST /api/payment/midtrans-webhook`
-  - `GET /api/payment/midtrans-webhook-status`
 - Supporting endpoints:
   - `GET /api/trip/[id]/export-pdf`
   - `POST /api/notifications/trip-event`
-  - `POST /api/waha/send`
-  - `POST /api/waha/webhook`
   - `POST /api/vendor/contact`
   - `GET /api/weather/[city]`
 - Supabase migration with tables, enums, indexes, triggers, helper functions, and RLS:
@@ -45,16 +40,15 @@ Copy `.env.example` to `.env.local` and fill values.
 
 Key variables:
 - `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL` (optional override, default: `stepfun/step-3.5-flash:free`)
 - `TRAVELYU_INTERNAL_API_TOKEN`
 - `N8N_NOTIFICATION_WEBHOOK_URL`
 - `N8N_NOTIFICATION_WEBHOOK_TOKEN`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `MIDTRANS_SERVER_KEY`
-- `MIDTRANS_CLIENT_KEY`
-- `WAHA_API_URL`
-- `WAHA_API_KEY`
+- `NEXT_PUBLIC_MAPTILER_API_KEY`
 - `OPENWEATHERMAP_API_KEY`
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
@@ -76,6 +70,12 @@ npm run typecheck
 npm run build
 ```
 
+## Auth Notes
+
+- User authentication now uses Clerk (`/login` renders Clerk SignIn).
+- App data is still persisted in Supabase.
+- On first Clerk login, app will auto-link/create a corresponding row in `public.users`.
+
 ## Supabase Migration
 
 Migration already applied to project `hyadkodaianrwjvmltwl` via MCP:
@@ -87,3 +87,9 @@ If you need to re-apply manually, run the same SQL from:
 ## Notes on n8n Evolution Node
 
 The active WhatsApp workflow in this n8n instance uses `n8n-nodes-evolution-api-english.evolutionApi` with `resource=messages-api` and `operation=send-text`, and TravelYu workflow has been aligned to that mapping.
+
+## Development Mode Notes
+
+- Payment wall is removed from trip creation flow.
+- After intake and comparison selection, itinerary can be generated directly.
+- Email and WhatsApp delivery are sent through n8n webhook integration.

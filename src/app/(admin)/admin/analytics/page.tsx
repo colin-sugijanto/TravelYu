@@ -7,7 +7,7 @@ export default async function AdminAnalyticsPage() {
 
   const metrics = [
     { label: "Trip Volume (30d)", value: `${metricsData.tripVolume30d}` },
-    { label: "Revenue Planning Fee", value: formatIdr(metricsData.revenuePlanningFeeIdr) },
+    { label: "Planning Fee Baseline", value: formatIdr(metricsData.revenuePlanningFeeIdr) },
     { label: "CS Intervention Rate", value: `${metricsData.csInterventionRate}%` },
     { label: "Avg Satisfaction", value: metricsData.avgSatisfaction ? `${metricsData.avgSatisfaction.toFixed(1)} / 5` : "No data" },
   ];

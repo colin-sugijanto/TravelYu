@@ -1,4 +1,4 @@
-import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai";
+import type { ModelMessage, UIMessage } from "ai";
 
 type LegacyMessage = {
   role: "user" | "assistant";
@@ -26,30 +26,31 @@ function isUiMessage(value: unknown): value is UIMessage {
   );
 }
 
-function toUiMessageWithoutId(message: LegacyMessage | UIMessage): Omit<UIMessage, "id"> {
-  if (isLegacyMessage(message)) {
-    return {
-      role: message.role,
-      parts: [{ type: "text", text: message.content }],
-    };
-  }
-
-  return {
-    role: message.role,
-    parts: message.parts,
-    ...(message.metadata ? { metadata: message.metadata } : {}),
-  };
+function extractTextFromParts(parts: Array<{ type: string; text?: string }>): string {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("\n")
+    .trim();
 }
 
 export async function toModelMessages(input: unknown): Promise<ModelMessage[]> {
   if (!Array.isArray(input)) return [];
 
-  const normalized = input
-    .filter((item) => isLegacyMessage(item) || isUiMessage(item))
-    .map((item) => toUiMessageWithoutId(item));
+  return input.flatMap((item): ModelMessage[] => {
+    if (isLegacyMessage(item)) {
+      const content = item.content.trim();
+      if (!content) return [];
+      return [{ role: item.role, content }];
+    }
 
-  if (normalized.length === 0) return [];
-  return convertToModelMessages(normalized);
+    if (!isUiMessage(item)) return [];
+
+    const content = extractTextFromParts(item.parts as Array<{ type: string; text?: string }>);
+    if (!content) return [];
+
+    return [{ role: item.role, content }];
+  });
 }
 
 export function extractPlainTextMessages(input: unknown): LegacyMessage[] {
@@ -60,11 +61,7 @@ export function extractPlainTextMessages(input: unknown): LegacyMessage[] {
     .map((item) => {
       if (isLegacyMessage(item)) return item;
 
-      const content = item.parts
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("\n")
-        .trim();
+      const content = extractTextFromParts(item.parts as Array<{ type: string; text?: string }>);
 
       return {
         role: item.role === "system" ? "assistant" : item.role,

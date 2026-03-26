@@ -1,30 +1,26 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
 
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  const isOwner = trip.user_id === user.id;
+  const isOwner = trip.user_id === appUser.id;
   if (!isOwner) {
-    const { data: member } = await supabase
+    const { data: member } = await supabaseAdmin
       .from("group_trip_members")
       .select("trip_id")
       .eq("trip_id", trip.id)
-      .eq("user_id", user.id)
+      .eq("user_id", appUser.id)
       .maybeSingle();
 
     if (!member) {
@@ -32,7 +28,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     }
   }
 
-  const { data: items } = await supabase
+  const { data: items } = await supabaseAdmin
     .from("itinerary_items")
     .select("vendor_id")
     .eq("trip_id", trip.id)
@@ -43,17 +39,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     return Response.json({ tripId: trip.id, vendors: [] });
   }
 
-  const { data: vendors } = await supabase
+  const { data: vendors } = await supabaseAdmin
     .from("vendors")
     .select("id,name,type,city")
     .in("id", vendorIds)
     .order("name", { ascending: true });
 
-  const { data: existingReviews } = await supabase
+  const { data: existingReviews } = await supabaseAdmin
     .from("vendor_reviews")
     .select("vendor_id,rating,comment")
     .eq("trip_id", trip.id)
-    .eq("user_id", user.id);
+    .eq("user_id", appUser.id);
 
   const reviewMap = new Map((existingReviews ?? []).map((review) => [review.vendor_id, review]));
 
@@ -78,21 +74,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trips").select("id,user_id,status").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id,status").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== user.id) {
+  if (trip.user_id !== appUser.id) {
     return Response.json({ error: "Only trip owner can submit reviews" }, { status: 403 });
   }
 
@@ -100,11 +92,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Reviews can be submitted only for completed trips" }, { status: 400 });
   }
 
-  const { error } = await supabase.from("vendor_reviews").upsert(
+  const { error } = await supabaseAdmin.from("vendor_reviews").upsert(
     {
       vendor_id: body.vendorId,
       trip_id: trip.id,
-      user_id: user.id,
+      user_id: appUser.id,
       rating: body.rating,
       comment: body.comment?.trim() || null,
       is_public: true,

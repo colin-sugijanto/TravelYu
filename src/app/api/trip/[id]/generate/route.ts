@@ -1,20 +1,16 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase
+  const { data: trip } = await supabaseAdmin
     .from("trips")
-    .select("id,user_id,payment_status,intake_data")
+    .select("id,user_id,intake_data")
     .eq("id", id)
     .maybeSingle();
 
@@ -22,12 +18,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== user.id) {
+  if (trip.user_id !== appUser.id) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  if (trip.payment_status !== "paid") {
-    return Response.json({ error: "Payment pending" }, { status: 400 });
   }
 
   const response = await fetch(new URL("/api/ai/generate-trip", request.url), {

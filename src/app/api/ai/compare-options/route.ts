@@ -69,8 +69,9 @@ export async function POST(request: Request) {
 
   const result = await generateText({
     model,
+    maxRetries: 2,
     prompt: `
-Generate 3 distinct pre-payment itinerary comparison options.
+Generate 3 distinct itinerary comparison options.
 
 Trip ID: ${body.tripId}
 Intake Summary: ${body.intakeSummary}

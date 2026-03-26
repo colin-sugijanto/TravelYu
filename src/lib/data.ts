@@ -1,6 +1,6 @@
 import { mockComparisonOptions, mockItineraryItems, mockPackingList, mockProfile, mockTrips } from "@/lib/mock-data";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { tierFromPoints } from "@/lib/utils";
 import type {
   CSChatSession,
@@ -14,22 +14,18 @@ import type {
 } from "@/types/domain";
 
 function hasSupabaseEnv() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 export async function getProfile(): Promise<UserProfile> {
   if (!hasSupabaseEnv()) return mockProfile;
 
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const appUser = await getCurrentAppUser();
+    if (!appUser) return mockProfile;
 
-    if (!user) return mockProfile;
-
-    const { data } = await supabase.from("users").select("*").eq("id", user.id).single();
-    if (!data) return { ...mockProfile, id: user.id, full_name: user.user_metadata?.full_name ?? mockProfile.full_name };
+    const { data } = await supabaseAdmin.from("users").select("*").eq("id", appUser.id).single();
+    if (!data) return { ...mockProfile, id: appUser.id, full_name: appUser.fullName ?? mockProfile.full_name, email: appUser.email };
     return data as UserProfile;
   } catch {
     return mockProfile;
@@ -40,8 +36,16 @@ export async function getTrips(): Promise<Trip[]> {
   if (!hasSupabaseEnv()) return mockTrips;
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("trips").select("*").order("created_at", { ascending: false }).limit(20);
+    const appUser = await getCurrentAppUser();
+    if (!appUser) return mockTrips;
+
+    let query = supabaseAdmin.from("trips").select("*").order("created_at", { ascending: false }).limit(20);
+
+    if (!isAdminRole(appUser.role)) {
+      query = query.eq("user_id", appUser.id);
+    }
+
+    const { data } = await query;
     return (data as Trip[]) ?? mockTrips;
   } catch {
     return mockTrips;
@@ -56,19 +60,12 @@ export async function getTripById(tripId: string): Promise<Trip | null> {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tripId);
 
   try {
-    const supabase = await createClient();
-    const userQuery = isUuid
-      ? await supabase.from("trips").select("*").eq("id", tripId).maybeSingle()
-      : await supabase.from("trips").select("*").eq("public_id", tripId).maybeSingle();
-
-    if (userQuery.data) return userQuery.data as Trip;
-
-    const adminQuery = isUuid
+    const tripQuery = isUuid
       ? await supabaseAdmin.from("trips").select("*").eq("id", tripId).maybeSingle()
       : await supabaseAdmin.from("trips").select("*").eq("public_id", tripId).maybeSingle();
 
-    if (!adminQuery.data) return null;
-    return adminQuery.data as Trip;
+    if (!tripQuery.data) return null;
+    return tripQuery.data as Trip;
   } catch {
     try {
       const adminQuery = isUuid
@@ -87,8 +84,7 @@ export async function getComparisonOptions(tripId: string): Promise<ComparisonOp
   if (!hasSupabaseEnv()) return mockComparisonOptions;
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("comparison_options").select("*").eq("trip_id", tripId).order("option_number");
+    const { data } = await supabaseAdmin.from("comparison_options").select("*").eq("trip_id", tripId).order("option_number");
     if (!data || data.length === 0) return mockComparisonOptions;
     return data as ComparisonOption[];
   } catch {
@@ -102,8 +98,7 @@ export async function getItineraryItems(tripId: string): Promise<ItineraryItem[]
   }
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("itinerary_items").select("*").eq("trip_id", tripId).order("day_number").order("sort_order");
+    const { data } = await supabaseAdmin.from("itinerary_items").select("*").eq("trip_id", tripId).order("day_number").order("sort_order");
     if (!data || data.length === 0) {
       const { data: adminItems } = await supabaseAdmin
         .from("itinerary_items")
@@ -140,8 +135,7 @@ export async function getVendors(): Promise<VendorSummary[]> {
   if (!hasSupabaseEnv()) return [];
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
       .from("vendors")
       .select("id,name,type,city,whatsapp_number,is_verified")
       .order("is_verified", { ascending: false })
@@ -154,12 +148,14 @@ export async function getVendors(): Promise<VendorSummary[]> {
   }
 }
 
-export async function getWahaLogs(limit = 50) {
+export async function getWhatsappLogs(limit = 50) {
   if (!hasSupabaseEnv()) return [];
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
+    const appUser = await getCurrentAppUser();
+    if (!appUser || !isAdminRole(appUser.role)) return [];
+
+    const { data } = await supabaseAdmin
       .from("waha_message_log")
       .select("id,recipient_type,recipient_id,message,status,created_at,sent_at")
       .order("created_at", { ascending: false })
@@ -175,8 +171,10 @@ export async function getFlaggedQueue(limit = 100): Promise<FlaggedQueueItem[]> 
   if (!hasSupabaseEnv()) return [];
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
+    const appUser = await getCurrentAppUser();
+    if (!appUser || !isAdminRole(appUser.role)) return [];
+
+    const { data } = await supabaseAdmin
       .from("cs_approval_queue")
       .select("id,trip_id,item_id,status,requested_change,reviewed_at,created_at")
       .order("created_at", { ascending: false })
@@ -188,8 +186,10 @@ export async function getFlaggedQueue(limit = 100): Promise<FlaggedQueueItem[]> 
     const itemIds = [...new Set(data.map((row) => row.item_id).filter(Boolean) as string[])];
 
     const [tripResult, itemResult] = await Promise.all([
-      supabase.from("trips").select("id,public_id").in("id", tripIds),
-      itemIds.length > 0 ? supabase.from("itinerary_items").select("id,title").in("id", itemIds) : Promise.resolve({ data: [] as Array<{ id: string; title: string }>, error: null }),
+      supabaseAdmin.from("trips").select("id,public_id").in("id", tripIds),
+      itemIds.length > 0
+        ? supabaseAdmin.from("itinerary_items").select("id,title").in("id", itemIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; title: string }>, error: null }),
     ]);
 
     const tripMap = new Map((tripResult.data ?? []).map((trip) => [trip.id, trip.public_id]));
@@ -209,8 +209,10 @@ export async function getOpenChatSessions(limit = 50): Promise<CSChatSession[]> 
   if (!hasSupabaseEnv()) return [];
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
+    const appUser = await getCurrentAppUser();
+    if (!appUser || !isAdminRole(appUser.role)) return [];
+
+    const { data } = await supabaseAdmin
       .from("cs_chat_sessions")
       .select("id,trip_id,user_id,cs_id,status,messages,created_at,updated_at")
       .order("updated_at", { ascending: false })
@@ -247,8 +249,10 @@ export async function getUsers(limit = 100): Promise<UserProfile[]> {
   if (!hasSupabaseEnv()) return [mockProfile];
 
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
+    const appUser = await getCurrentAppUser();
+    if (!appUser || !isAdminRole(appUser.role)) return [mockProfile];
+
+    const { data } = await supabaseAdmin
       .from("users")
       .select("id,full_name,whatsapp_number,travel_preferences,role,points_balance,lifetime_points,loyalty_tier")
       .order("created_at", { ascending: false })
@@ -264,8 +268,7 @@ export async function getTripVendors(tripId: string): Promise<VendorSummary[]> {
   if (!hasSupabaseEnv()) return [];
 
   try {
-    const supabase = await createClient();
-    const { data: itineraryItems } = await supabase
+    const { data: itineraryItems } = await supabaseAdmin
       .from("itinerary_items")
       .select("vendor_id")
       .eq("trip_id", tripId)
@@ -274,7 +277,7 @@ export async function getTripVendors(tripId: string): Promise<VendorSummary[]> {
     const vendorIds = [...new Set((itineraryItems ?? []).map((item) => item.vendor_id).filter(Boolean))] as string[];
     if (vendorIds.length === 0) return [];
 
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
       .from("vendors")
       .select("id,name,type,city,whatsapp_number,is_verified")
       .in("id", vendorIds)
@@ -290,7 +293,7 @@ export async function getAdminMetrics() {
   if (!hasSupabaseEnv()) {
     return {
       tripVolume30d: mockTrips.length,
-      revenuePlanningFeeIdr: mockTrips.filter((trip) => trip.payment_status === "paid").reduce((sum, trip) => sum + trip.planning_fee_idr, 0),
+      revenuePlanningFeeIdr: mockTrips.reduce((sum, trip) => sum + trip.planning_fee_idr, 0),
       csInterventionRate: 0,
       avgSatisfaction: null as number | null,
       flaggedPending: 0,
@@ -299,15 +302,26 @@ export async function getAdminMetrics() {
   }
 
   try {
-    const supabase = await createClient();
+    const appUser = await getCurrentAppUser();
+    if (!appUser || !isAdminRole(appUser.role)) {
+      return {
+        tripVolume30d: 0,
+        revenuePlanningFeeIdr: 0,
+        csInterventionRate: 0,
+        avgSatisfaction: null as number | null,
+        flaggedPending: 0,
+        openChats: 0,
+      };
+    }
+
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 30);
 
     const [tripsResult, flaggedResult, openChatsResult, reviewsResult] = await Promise.all([
-      supabase.from("trips").select("id,planning_fee_idr,created_at").gte("created_at", fromDate.toISOString()),
-      supabase.from("cs_approval_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
-      supabase.from("cs_chat_sessions").select("id", { count: "exact", head: true }).eq("status", "open"),
-      supabase.from("vendor_reviews").select("rating"),
+      supabaseAdmin.from("trips").select("id,planning_fee_idr,created_at").gte("created_at", fromDate.toISOString()),
+      supabaseAdmin.from("cs_approval_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabaseAdmin.from("cs_chat_sessions").select("id", { count: "exact", head: true }).eq("status", "open"),
+      supabaseAdmin.from("vendor_reviews").select("rating"),
     ]);
 
     const tripRows = tripsResult.data ?? [];
@@ -344,18 +358,15 @@ export async function redeemPlanningDiscount() {
   }
 
   try {
-    const {
-      data: { user },
-    } = await createClient().then((client) => client.auth.getUser());
-
-    if (!user) {
+    const appUser = await getCurrentAppUser();
+    if (!appUser) {
       return { ok: false, error: "Unauthorized" };
     }
 
     const { data: profile } = await supabaseAdmin
       .from("users")
       .select("id,points_balance,lifetime_points,loyalty_tier")
-      .eq("id", user.id)
+      .eq("id", appUser.id)
       .single();
 
     if (!profile) {
@@ -380,12 +391,12 @@ export async function redeemPlanningDiscount() {
           loyalty_tier: nextTier,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", user.id),
+        .eq("id", appUser.id),
       supabaseAdmin
         .from("user_points")
         .upsert(
           {
-            user_id: user.id,
+            user_id: appUser.id,
             points_balance: nextPoints,
             lifetime_points: nextLifetime,
             tier: nextTier,
@@ -394,7 +405,7 @@ export async function redeemPlanningDiscount() {
           { onConflict: "user_id" },
         ),
       supabaseAdmin.from("user_points_log").insert({
-        user_id: user.id,
+        user_id: appUser.id,
         points_delta: delta,
         event_type: "redeem_planning_fee",
         reference_id: `redeem_${Date.now()}`,

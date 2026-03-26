@@ -1,4 +1,4 @@
-import { Compass, MessageCircle, Wallet, Bell } from "lucide-react";
+import { Compass, MessageCircle, Sparkles, Bell } from "lucide-react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
 
@@ -14,9 +14,9 @@ const features = [
     icon: Compass,
   },
   {
-    title: "Budget & Payment Flow",
-    body: "QRIS + webhook update otomatis untuk unlock itinerary generation.",
-    icon: Wallet,
+    title: "Development-First Flow",
+    body: "Setelah pilih opsi trip, itinerary langsung digenerate tanpa payment wall.",
+    icon: Sparkles,
   },
   {
     title: "Omnichannel Notifications",

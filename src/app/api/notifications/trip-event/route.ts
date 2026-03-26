@@ -2,8 +2,6 @@ import { resolveTripRecipient, sendTravelYuNotification } from "@/lib/notificati
 
 const allowedEvents = new Set([
   "itinerary_ready",
-  "payment_success",
-  "payment_failed",
   "cs_approved",
   "trip_reminder_h1",
 ]);
@@ -37,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   const result = await sendTravelYuNotification({
-    eventType: body.eventType as "itinerary_ready" | "payment_success" | "payment_failed" | "cs_approved" | "trip_reminder_h1",
+    eventType: body.eventType as "itinerary_ready" | "cs_approved" | "trip_reminder_h1",
     tripId: recipient.tripId,
     userName: recipient.userName,
     email: recipient.email,

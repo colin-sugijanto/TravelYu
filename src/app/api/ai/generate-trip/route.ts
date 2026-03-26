@@ -67,16 +67,12 @@ export async function POST(request: Request) {
 
   const { data: trip, error: tripError } = await supabaseAdmin
     .from("trips")
-    .select("id,intake_data,payment_status,selected_comparison_option")
+    .select("id,intake_data,selected_comparison_option")
     .eq("id", body.tripId)
     .single();
 
   if (tripError || !trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
-  }
-
-  if (trip.payment_status !== "paid") {
-    return Response.json({ error: "Payment must be completed before itinerary generation" }, { status: 400 });
   }
 
   await supabaseAdmin.from("trips").update({ status: "generating" }).eq("id", body.tripId);
@@ -86,6 +82,7 @@ export async function POST(request: Request) {
 
   const result = await generateText({
     model,
+    maxRetries: 2,
     system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
     prompt: `
 You are TravelYu itinerary generation engine.

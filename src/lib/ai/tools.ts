@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { searchIndonesiaPlaces } from "@/lib/ai/tavily";
+import { normalizePhoneToE164, sendTravelYuNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isMajorChange } from "@/lib/utils";
 
@@ -254,7 +255,7 @@ export const itineraryTools = {
   },
 
   contact_vendor_via_whatsapp: {
-    description: "Send WhatsApp message to vendor via WA endpoint",
+    description: "Send WhatsApp message to vendor via n8n workflow",
     inputSchema: z.object({
       vendorId: z.string(),
       message: z.string(),
@@ -265,26 +266,26 @@ export const itineraryTools = {
       const { data: vendor } = await supabaseAdmin.from("vendors").select("id,whatsapp_number").eq("id", input.vendorId).single();
       if (!vendor?.whatsapp_number) return { ok: false, reason: "Vendor WA number not found" };
 
-      const response = await fetch(`${process.env.WAHA_API_URL}/api/sendText`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.WAHA_API_KEY ?? ""}`,
-        },
-        body: JSON.stringify({
-          chatId: vendor.whatsapp_number,
-          text: input.message,
-        }),
+      const phoneE164 = normalizePhoneToE164(vendor.whatsapp_number);
+      if (!phoneE164) return { ok: false, reason: "Vendor WA number is invalid" };
+
+      const result = await sendTravelYuNotification({
+        eventType: "vendor_contact",
+        tripId: null,
+        userName: "TravelYu CS",
+        phoneE164,
+        channelPreference: "whatsapp",
+        waText: input.message,
       });
 
       await supabaseAdmin.from("waha_message_log").insert({
         recipient_type: "vendor",
         recipient_id: vendor.id,
         message: input.message,
-        status: response.ok ? "sent" : "failed",
+        status: result.ok ? "sent" : "failed",
       });
 
-      return { ok: response.ok };
+      return { ok: result.ok };
     },
   },
 

@@ -1,6 +1,5 @@
 import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { getTrips } from "@/lib/data";
-import { formatIdr } from "@/lib/utils";
 
 export default async function AdminTripsPage() {
   const trips = await getTrips();
@@ -16,9 +15,7 @@ export default async function AdminTripsPage() {
               <span className="font-semibold">{trip.public_id}</span>
               <span className="text-[var(--text-soft)]">{trip.status}</span>
             </div>
-            <p className="text-xs text-[var(--text-soft)]">
-              Payment: {trip.payment_status} · Fee: {formatIdr(trip.planning_fee_idr)}
-            </p>
+            <p className="text-xs text-[var(--text-soft)]">Planning fee baseline: {trip.planning_fee_idr.toLocaleString("id-ID")}</p>
           </div>
         ))}
       </div>

@@ -37,6 +37,7 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model,
+    maxRetries: 2,
     system: `${EDITOR_SYSTEM_PROMPT}\nTrip ID aktif: ${tripId}\nUser ID aktif: ${userId ?? "unknown"}`,
     messages: modelMessages,
     tools: {

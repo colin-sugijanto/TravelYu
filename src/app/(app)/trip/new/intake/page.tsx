@@ -1,28 +1,26 @@
 import { redirect } from "next/navigation";
 
 import { IntakeChat } from "@/components/intake/intake-chat";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 async function createDraftTrip(mode: "standard" | "surprise") {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return "trip_01";
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const appUser = await getCurrentAppUser();
 
-  if (!user) {
+  if (!appUser) {
     return null;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("trips")
     .insert({
-      user_id: user.id,
+      user_id: appUser.id,
       status: "intake",
-      payment_status: "pending",
+      payment_status: "paid",
       is_surprise_mode: mode === "surprise",
       intake_data: {
         surpriseMode: mode === "surprise",

@@ -1,24 +1,22 @@
 import { redirect } from "next/navigation";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 async function createTrip(mode: "standard" | "surprise") {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const appUser = await getCurrentAppUser();
 
-  if (!user) {
+  if (!appUser) {
     return null;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("trips")
     .insert({
-      user_id: user.id,
+      user_id: appUser.id,
       status: "intake",
-      payment_status: "pending",
+      payment_status: "paid",
       is_surprise_mode: mode === "surprise",
       intake_data: { surpriseMode: mode === "surprise" },
     })

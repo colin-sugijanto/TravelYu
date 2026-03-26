@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ComparisonCards } from "@/components/intake/comparison-cards";
+import { getCurrentAppUser } from "@/lib/auth";
 import { getComparisonOptions } from "@/lib/data";
-import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export default async function TripComparePage({
   searchParams,
@@ -15,35 +15,22 @@ export default async function TripComparePage({
     redirect("/trip/new/intake");
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const appUser = await getCurrentAppUser();
 
-  if (!user) {
+  if (!appUser) {
     redirect(`/login?next=${encodeURIComponent(`/trip/new/compare?tripId=${tripId}`)}`);
   }
 
   const resolvedTripId = tripId;
 
-  const { data: trip } = await supabase.from("trips").select("id,user_id,payment_status").eq("id", resolvedTripId).maybeSingle();
-  if (!trip || trip.user_id !== user.id) {
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").eq("id", resolvedTripId).maybeSingle();
+  if (!trip || trip.user_id !== appUser.id) {
     redirect("/dashboard");
   }
 
   const options = await getComparisonOptions(resolvedTripId);
 
   return (
-    <div className="space-y-4">
-      <ComparisonCards tripId={resolvedTripId} options={options} />
-      <div className="flex justify-end">
-        <Link
-          href={`/trip/new/payment?tripId=${encodeURIComponent(resolvedTripId)}`}
-          className="inline-flex rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white"
-        >
-          Continue to Payment
-        </Link>
-      </div>
-    </div>
+    <ComparisonCards tripId={resolvedTripId} options={options} />
   );
 }

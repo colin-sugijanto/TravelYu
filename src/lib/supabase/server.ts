@@ -1,23 +1,41 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getCurrentSupabaseUser } from "@/lib/auth";
 
-export async function createClient() {
-  const cookieStore = await cookies();
+type SupabaseLike = typeof supabaseAdmin;
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
-      },
+type SupabaseWithClerkAuth = SupabaseLike & {
+  auth: SupabaseLike["auth"] & {
+    getUser: () => Promise<{
+      data: {
+        user: Awaited<ReturnType<typeof getCurrentSupabaseUser>>;
+      };
+      error: null;
+    }>;
+  };
+};
+
+export async function createClient(): Promise<SupabaseWithClerkAuth> {
+  const mappedUser = await getCurrentSupabaseUser();
+  const base = supabaseAdmin as SupabaseWithClerkAuth;
+
+  return new Proxy(base, {
+    get(target, prop, receiver) {
+      if (prop === "auth") {
+        const authApi = Reflect.get(target, prop, receiver) as SupabaseWithClerkAuth["auth"];
+        return {
+          ...authApi,
+          async getUser() {
+            return {
+              data: {
+                user: mappedUser,
+              },
+              error: null,
+            };
+          },
+        };
+      }
+
+      return Reflect.get(target, prop, receiver);
     },
-  );
+  }) as SupabaseWithClerkAuth;
 }

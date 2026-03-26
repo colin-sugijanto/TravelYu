@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 function sanitizeFileName(input: string) {
@@ -11,27 +11,22 @@ function sanitizeFileName(input: string) {
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== user.id) {
-    const { data: member } = await supabase
+  if (trip.user_id !== appUser.id) {
+    const { data: member } = await supabaseAdmin
       .from("group_trip_members")
       .select("trip_id")
       .eq("trip_id", trip.id)
-      .eq("user_id", user.id)
+      .eq("user_id", appUser.id)
       .maybeSingle();
 
     if (!member) {
@@ -39,7 +34,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     }
   }
 
-  const { data: photos, error } = await supabase
+  const { data: photos, error } = await supabaseAdmin
     .from("trip_photos")
     .select("id,trip_id,user_id,storage_path,caption,uploaded_at")
     .eq("trip_id", trip.id)
@@ -52,7 +47,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   const normalized = await Promise.all(
     (photos ?? []).map(async (photo) => {
-      const { data } = supabase.storage.from("trip-photos").getPublicUrl(photo.storage_path);
+      const { data } = supabaseAdmin.storage.from("trip-photos").getPublicUrl(photo.storage_path);
       return {
         ...photo,
         publicUrl: data.publicUrl,
@@ -65,28 +60,23 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  const isOwner = trip.user_id === user.id;
+  const isOwner = trip.user_id === appUser.id;
   if (!isOwner) {
-    const { data: member } = await supabase
+    const { data: member } = await supabaseAdmin
       .from("group_trip_members")
       .select("trip_id")
       .eq("trip_id", trip.id)
-      .eq("user_id", user.id)
+      .eq("user_id", appUser.id)
       .maybeSingle();
 
     if (!member) {
@@ -123,9 +113,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: uploadError.message }, { status: 500 });
   }
 
-  const { error: insertError } = await supabase.from("trip_photos").insert({
+  const { error: insertError } = await supabaseAdmin.from("trip_photos").insert({
     trip_id: trip.id,
-    user_id: user.id,
+    user_id: appUser.id,
     storage_path: path,
     caption: caption || null,
   });
@@ -146,21 +136,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return Response.json({ error: "photoId is required" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  const { data: photo } = await supabase
+  const { data: photo } = await supabaseAdmin
     .from("trip_photos")
     .select("id,user_id,storage_path")
     .eq("id", photoId)
@@ -171,13 +157,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return Response.json({ error: "Photo not found" }, { status: 404 });
   }
 
-  if (photo.user_id !== user.id && trip.user_id !== user.id) {
+  if (photo.user_id !== appUser.id && trip.user_id !== appUser.id) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   await Promise.all([
     supabaseAdmin.storage.from("trip-photos").remove([photo.storage_path]),
-    supabase.from("trip_photos").delete().eq("id", photo.id),
+    supabaseAdmin.from("trip_photos").delete().eq("id", photo.id),
   ]);
 
   return Response.json({ ok: true });

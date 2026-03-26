@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function PATCH(
   request: Request,
@@ -20,21 +21,16 @@ export async function PATCH(
     edit_manual: "edited_manual",
   } as const;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase.from("users").select("role").eq("id", user.id).single();
-  if (!profile || (profile.role !== "admin" && profile.role !== "super_admin")) {
+  if (!isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data: queueItem } = await supabase
+  const { data: queueItem } = await supabaseAdmin
     .from("cs_approval_queue")
     .select("id,trip_id,item_id,status,requested_change")
     .eq("id", queueId)
@@ -51,11 +47,11 @@ export async function PATCH(
 
   const nextStatus = statusMap[action];
 
-  const { error: queueError } = await supabase
+  const { error: queueError } = await supabaseAdmin
     .from("cs_approval_queue")
     .update({
       status: nextStatus,
-      cs_id: user.id,
+      cs_id: appUser.id,
       reviewed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -70,7 +66,7 @@ export async function PATCH(
     const type = String(requested.type ?? "");
 
     if (type === "swap_vendor" && typeof requested.new_vendor_id === "string") {
-      await supabase
+      await supabaseAdmin
         .from("itinerary_items")
         .update({
           vendor_id: requested.new_vendor_id,
@@ -83,12 +79,12 @@ export async function PATCH(
     }
 
     if (type === "delete_item") {
-      await supabase.from("itinerary_items").delete().eq("id", queueItem.item_id);
+      await supabaseAdmin.from("itinerary_items").delete().eq("id", queueItem.item_id);
     }
   }
 
   if (action === "reject" && queueItem.item_id) {
-    await supabase
+    await supabaseAdmin
       .from("itinerary_items")
       .update({
         status: "booked_flexible",

@@ -4,18 +4,20 @@ type NotificationChannel = "email" | "whatsapp" | "both";
 
 type TravelYuEventType =
   | "itinerary_ready"
-  | "payment_success"
-  | "payment_failed"
   | "cs_approved"
-  | "trip_reminder_h1";
+  | "trip_reminder_h1"
+  | "vendor_contact";
 
 export interface TravelYuNotificationPayload {
   eventType: TravelYuEventType;
-  tripId: string;
+  tripId?: string | null;
   userName?: string | null;
   email?: string | null;
   phoneE164?: string | null;
   channelPreference?: NotificationChannel | string | null;
+  subject?: string | null;
+  emailText?: string | null;
+  waText?: string | null;
 }
 
 interface TripRecipient {
@@ -25,7 +27,7 @@ interface TripRecipient {
   phoneE164: string | null;
 }
 
-function normalizePhoneToE164(phone: string | null | undefined): string | null {
+export function normalizePhoneToE164(phone: string | null | undefined): string | null {
   const raw = String(phone ?? "").trim();
   if (!raw) return null;
   const digits = raw.replace(/\D/g, "");
@@ -79,11 +81,14 @@ export async function sendTravelYuNotification(payload: TravelYuNotificationPayl
 
   const body = {
     event_type: payload.eventType,
-    trip_id: payload.tripId,
+    trip_id: payload.tripId ?? null,
     user_name: payload.userName ?? "Traveler",
     email: payload.email ?? null,
     phone_e164: payload.phoneE164 ?? null,
     channel_preference: normalizeChannelPreference(payload.channelPreference, payload.email, payload.phoneE164),
+    subject: payload.subject ?? null,
+    email_text: payload.emailText ?? null,
+    wa_text: payload.waText ?? null,
   };
 
   const headers: Record<string, string> = {
@@ -120,18 +125,14 @@ export async function resolveTripRecipient(tripId: string): Promise<TripRecipien
 
   const { data: userRow } = await supabaseAdmin
     .from("users")
-    .select("full_name,whatsapp_number")
+    .select("full_name,whatsapp_number,email")
     .eq("id", trip.user_id as string)
     .maybeSingle();
 
   const userName = (userRow?.full_name as string | null | undefined) ?? null;
   const phoneE164 = normalizePhoneToE164((userRow?.whatsapp_number as string | null | undefined) ?? null);
 
-  let email: string | null = null;
-  const authResult = await supabaseAdmin.auth.admin.getUserById(trip.user_id as string);
-  if (!authResult.error) {
-    email = authResult.data.user?.email ?? null;
-  }
+  const email = (userRow?.email as string | null | undefined) ?? null;
 
   return {
     tripId: trip.id as string,

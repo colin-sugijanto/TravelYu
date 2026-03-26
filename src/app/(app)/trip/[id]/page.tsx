@@ -4,18 +4,16 @@ import { ItineraryMap } from "@/components/itinerary/map";
 import { ItineraryTimeline } from "@/components/itinerary/timeline";
 import { Card, CardTitle } from "@/components/ui/card";
 import { WeatherBanner } from "@/components/weather/weather-banner";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getItineraryItems, getTripById } from "@/lib/data";
 import { redirect } from "next/navigation";
 
 export default async function TripDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const appUser = await getCurrentAppUser();
 
-  if (!user) {
+  if (!appUser) {
     redirect(`/login?next=${encodeURIComponent(`/trip/${id}`)}`);
   }
 
@@ -24,13 +22,13 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
     redirect("/dashboard");
   }
 
-  const isOwner = trip.user_id === user.id;
+  const isOwner = trip.user_id === appUser.id;
   if (!isOwner) {
-    const { data: member } = await supabase
+    const { data: member } = await supabaseAdmin
       .from("group_trip_members")
       .select("trip_id")
       .eq("trip_id", trip.id)
-      .eq("user_id", user.id)
+      .eq("user_id", appUser.id)
       .maybeSingle();
 
     if (!member) {
@@ -59,7 +57,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
           <ItineraryMap items={items} />
         </div>
         <div className="space-y-4">
-          <EditorChat tripId={trip.id} userId={user.id} />
+          <EditorChat tripId={trip.id} userId={appUser.id} />
           <BudgetTracker totalBudgetIdr={15000000} items={items} />
         </div>
       </div>

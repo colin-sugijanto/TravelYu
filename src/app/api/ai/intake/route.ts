@@ -36,6 +36,7 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model,
+    maxRetries: 2,
     system: `${INTAKE_SYSTEM_PROMPT}\nMode trip saat ini: ${mode === "surprise" ? "Surprise Me" : "Standard"}.`,
     messages: modelMessages,
   });

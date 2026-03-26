@@ -12,7 +12,7 @@ export default async function DashboardPage() {
       <section className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
         <Card className="p-5">
           <CardTitle className="text-xl">Halo, {profile.full_name ?? "Traveler"}</CardTitle>
-          <CardText className="mt-1">Kelola trip, edit itinerary, dan pantau notifikasi payment/CS dari satu dashboard.</CardText>
+          <CardText className="mt-1">Kelola trip, edit itinerary, dan pantau notifikasi dari satu dashboard.</CardText>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Link href="/trip/new/intake" className="rounded-xl bg-[var(--brand)] px-4 py-3 text-sm font-semibold text-white">
               Mulai Trip Baru
@@ -36,9 +36,7 @@ export default async function DashboardPage() {
               className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-white px-3 py-3 text-sm transition hover:bg-[var(--bg-alt)]"
             >
               <span className="font-semibold">{trip.public_id}</span>
-              <span className="text-[var(--text-soft)]">
-                {trip.status} · {trip.payment_status}
-              </span>
+              <span className="text-[var(--text-soft)]">{trip.status}</span>
             </Link>
           ))}
         </div>

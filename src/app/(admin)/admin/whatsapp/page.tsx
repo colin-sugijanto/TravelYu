@@ -1,13 +1,13 @@
 import { Card, CardText, CardTitle } from "@/components/ui/card";
-import { getWahaLogs } from "@/lib/data";
+import { getWhatsappLogs } from "@/lib/data";
 
 export default async function AdminWhatsappPage() {
-  const logs = await getWahaLogs(100);
+  const logs = await getWhatsappLogs(100);
 
   return (
     <Card className="p-5">
       <CardTitle>WhatsApp Center</CardTitle>
-      <CardText className="mt-1">Audit log outgoing/incoming WA messages dari WAHA/Evolution automation.</CardText>
+      <CardText className="mt-1">Audit log outgoing/incoming WA messages dari n8n Evolution workflow.</CardText>
 
       <div className="mt-3 space-y-2">
         {logs.length === 0 ? <CardText>Belum ada log WhatsApp.</CardText> : null}

@@ -1,16 +1,14 @@
 import { MemoryWall } from "@/components/memory/memory-wall";
+import { getCurrentAppUser } from "@/lib/auth";
 import { getTripById, getTripPhotos } from "@/lib/data";
-import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 
 export default async function TripMemoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const appUser = await getCurrentAppUser();
 
-  if (!user) {
+  if (!appUser) {
     redirect(`/login?next=${encodeURIComponent(`/trip/${id}/memory`)}`);
   }
 
@@ -20,13 +18,13 @@ export default async function TripMemoryPage({ params }: { params: Promise<{ id:
     redirect("/dashboard");
   }
 
-  const isOwner = trip.user_id === user.id;
+  const isOwner = trip.user_id === appUser.id;
   if (!isOwner) {
-    const { data: member } = await supabase
+    const { data: member } = await supabaseAdmin
       .from("group_trip_members")
       .select("trip_id")
       .eq("trip_id", trip.id)
-      .eq("user_id", user.id)
+      .eq("user_id", appUser.id)
       .maybeSingle();
 
     if (!member) {

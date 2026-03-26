@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 
 import { APP_NAME } from "@/lib/constants";
 export function AppHeader() {
@@ -31,6 +32,19 @@ export function AppHeader() {
           >
             Start Planning
           </Link>
+          <Show when="signed-out">
+            <SignInButton mode="redirect" forceRedirectUrl="/dashboard">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full border border-[var(--border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--bg-alt)]"
+              >
+                Login
+              </button>
+            </SignInButton>
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
         </nav>
       </div>
     </header>
