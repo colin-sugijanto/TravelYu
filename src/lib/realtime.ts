@@ -22,3 +22,45 @@ export const supabaseRealtime =
         },
       })
     : (createMissingEnvClient() as ReturnType<typeof createClient>);
+
+export function subscribeToFlaggedQueue(callback: () => void) {
+  const channel = supabaseRealtime
+    .channel("admin-flagged-queue")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "cs_approval_queue",
+      },
+      () => callback(),
+    )
+    .subscribe();
+
+  return () => {
+    void supabaseRealtime.removeChannel(channel);
+  };
+}
+
+export function subscribeToCsChat(
+  sessionId: string,
+  callback: (payload: unknown) => void,
+) {
+  const channel = supabaseRealtime
+    .channel(`cs-chat-${sessionId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "cs_chat_sessions",
+        filter: `id=eq.${sessionId}`,
+      },
+      (payload) => callback(payload),
+    )
+    .subscribe();
+
+  return () => {
+    void supabaseRealtime.removeChannel(channel);
+  };
+}

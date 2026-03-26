@@ -1,4 +1,4 @@
-import { normalizePhoneToE164, sendTravelYuNotification } from "@/lib/notifications";
+import { normalizePhoneToE164, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
@@ -10,6 +10,10 @@ export async function POST(request: Request) {
     vendorId: string;
     message: string;
   };
+
+  if (!body.vendorId || !body.message?.trim()) {
+    return Response.json({ error: "vendorId and message are required" }, { status: 400 });
+  }
 
   const { data: vendor } = await supabaseAdmin
     .from("vendors")
@@ -26,7 +30,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Vendor WhatsApp format is invalid" }, { status: 400 });
   }
 
-  const result = await sendTravelYuNotification({
+  scheduleNotification({
     eventType: "vendor_contact",
     tripId: null,
     userName: "TravelYu CS",
@@ -39,8 +43,8 @@ export async function POST(request: Request) {
     recipient_type: "vendor",
     recipient_id: vendor.id,
     message: body.message,
-    status: result.ok ? "sent" : "failed",
+    status: "queued",
   });
 
-  return Response.json({ ok: result.ok });
+  return Response.json({ ok: true, queued: true });
 }

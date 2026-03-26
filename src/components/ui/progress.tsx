@@ -11,7 +11,7 @@ export function Progress({ value, className }: ProgressProps) {
   return (
     <div className={cn("h-2 w-full overflow-hidden rounded-full bg-[#dde8dd]", className)}>
       <div
-        className="h-full rounded-full bg-[linear-gradient(90deg,#2f8f6b,#f6b63f)] transition-all"
+        className="h-full rounded-full bg-[linear-gradient(90deg,var(--brand),var(--accent-sky))] transition-all"
         style={{ width: `${clamped}%` }}
       />
     </div>

@@ -56,4 +56,7 @@ export const openrouter = createOpenAI({
 
 const modelId = process.env.OPENROUTER_MODEL ?? OPENROUTER_MODEL;
 
-export const model = openrouter(modelId);
+// Force Chat Completions compatibility for OpenRouter providers/models.
+// The default OpenAI provider call path uses Responses API, which can reject
+// multi-turn assistant history for some providers.
+export const model = openrouter.chat(modelId);

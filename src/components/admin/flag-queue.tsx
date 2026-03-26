@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { subscribeToFlaggedQueue } from "@/lib/realtime";
 import type { FlaggedQueueItem } from "@/types/domain";
 
 interface AdminFlagQueueProps {
@@ -41,13 +43,34 @@ function formatDate(value: string) {
 }
 
 export function AdminFlagQueue({ items, compact = false }: AdminFlagQueueProps) {
-  const [rows, setRows] = useState(items);
+  const router = useRouter();
+  const [optimisticUpdates, setOptimisticUpdates] = useState<
+    Record<string, Pick<FlaggedQueueItem, "status" | "reviewed_at">>
+  >({});
   const [actingId, setActingId] = useState<string | null>(null);
 
-  const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => Number(inferPriority(b) === "high") - Number(inferPriority(a) === "high")),
-    [rows],
-  );
+  useEffect(() => {
+    const unsubscribe = subscribeToFlaggedQueue(() => {
+      router.refresh();
+    });
+
+    return unsubscribe;
+  }, [router]);
+
+  const sortedRows = useMemo(() => {
+    const merged = items.map((item) =>
+      optimisticUpdates[item.id]
+        ? {
+            ...item,
+            ...optimisticUpdates[item.id],
+          }
+        : item,
+    );
+
+    return merged.sort(
+      (a, b) => Number(inferPriority(b) === "high") - Number(inferPriority(a) === "high"),
+    );
+  }, [items, optimisticUpdates]);
 
   const approve = async (item: FlaggedQueueItem, action: "approve" | "reject" | "edit_manual") => {
     if (actingId) return;
@@ -62,17 +85,13 @@ export function AdminFlagQueue({ items, compact = false }: AdminFlagQueueProps) 
 
       if (!response.ok) return;
 
-      setRows((prev) =>
-        prev.map((row) =>
-          row.id === item.id
-            ? {
-                ...row,
-                status: action === "approve" ? "approved" : action === "reject" ? "rejected" : "edited_manual",
-                reviewed_at: new Date().toISOString(),
-              }
-            : row,
-        ),
-      );
+      setOptimisticUpdates((prev) => ({
+        ...prev,
+        [item.id]: {
+          status: action === "approve" ? "approved" : action === "reject" ? "rejected" : "edited_manual",
+          reviewed_at: new Date().toISOString(),
+        },
+      }));
     } finally {
       setActingId(null);
     }
@@ -90,7 +109,7 @@ export function AdminFlagQueue({ items, compact = false }: AdminFlagQueueProps) 
 
           return (
             <div key={item.id} className="rounded-xl border border-[var(--border)] bg-white p-3">
-            <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold">{item.trip_public_id}</p>
                 <div className="flex items-center gap-2">
                   <Badge tone={priority === "high" ? "danger" : "sun"}>{priority}</Badge>

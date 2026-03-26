@@ -18,6 +18,15 @@ const categoryMap: Record<ItineraryItem["activity_type"], string> = {
 };
 
 export function BudgetTracker({ totalBudgetIdr, items }: BudgetTrackerProps) {
+  if (items.length === 0) {
+    return (
+      <Card className="p-5">
+        <CardTitle>Budget Tracker</CardTitle>
+        <CardText className="mt-2">Budget akan muncul setelah itinerary berhasil digenerate.</CardText>
+      </Card>
+    );
+  }
+
   const spent = items.reduce((sum, item) => sum + item.est_cost_idr, 0);
   const left = Math.max(0, totalBudgetIdr - spent);
   const usedPercent = totalBudgetIdr ? Math.round((spent / totalBudgetIdr) * 100) : 0;

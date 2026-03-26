@@ -17,6 +17,23 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: "TravelYu!",
   description: "AI-assisted personal travel planning for Indonesian destinations",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "TravelYu!",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport = {
+  themeColor: "#f97316",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

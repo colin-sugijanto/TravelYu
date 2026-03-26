@@ -1,7 +1,9 @@
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { getCurrentAppUser } from "@/lib/auth";
 import { getProfile } from "@/lib/data";
 import { formatIdr } from "@/lib/utils";
 import { RedeemPointsButton } from "@/components/loyalty/redeem-points-button";
+import { redirect } from "next/navigation";
 
 function rewardFromPoints(points: number) {
   if (points >= 1000) return "Free planning fee available";
@@ -10,7 +12,12 @@ function rewardFromPoints(points: number) {
 }
 
 export default async function ReferralPage() {
-  const profile = await getProfile();
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
+    redirect("/login?next=%2Freferral");
+  }
+
+  const profile = await getProfile(appUser.id);
   const referralCode = `TRAVELYU-${(profile.full_name ?? "traveler").replace(/\s+/g, "-").toUpperCase()}`;
 
   return (

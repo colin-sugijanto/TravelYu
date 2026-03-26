@@ -1,7 +1,14 @@
-import { mockComparisonOptions, mockItineraryItems, mockPackingList, mockProfile, mockTrips } from "@/lib/mock-data";
+import { cacheLife, cacheTag, revalidateTag } from "next/cache";
+
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
+import {
+  mockComparisonOptions,
+  mockItineraryItems,
+  mockPackingList,
+  mockProfile,
+  mockTrips,
+} from "@/lib/mock-data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { tierFromPoints } from "@/lib/utils";
 import type {
   CSChatSession,
   ComparisonOption,
@@ -13,22 +20,43 @@ import type {
   VendorSummary,
 } from "@/types/domain";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function hasSupabaseEnv() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-export async function getProfile(): Promise<UserProfile> {
-  if (!hasSupabaseEnv()) return mockProfile;
+export async function getProfile(userId: string): Promise<UserProfile> {
+  "use cache";
+  cacheLife({ revalidate: 300, expire: 3600 });
+  cacheTag(`user:${userId}:profile`);
+
+    if (!hasSupabaseEnv()) {
+      return {
+        ...mockProfile,
+        id: userId,
+      };
+    }
 
   try {
-    const appUser = await getCurrentAppUser();
-    if (!appUser) return mockProfile;
+    const { data } = await supabaseAdmin.from("users").select("*").eq("id", userId).single();
 
-    const { data } = await supabaseAdmin.from("users").select("*").eq("id", appUser.id).single();
-    if (!data) return { ...mockProfile, id: appUser.id, full_name: appUser.fullName ?? mockProfile.full_name, email: appUser.email };
+    if (!data) {
+      return {
+        ...mockProfile,
+        id: userId,
+        role: "user",
+      };
+    }
+
     return data as UserProfile;
   } catch {
-    return mockProfile;
+    return {
+      ...mockProfile,
+      id: userId,
+      role: "user",
+    };
   }
 }
 
@@ -39,7 +67,11 @@ export async function getTrips(): Promise<Trip[]> {
     const appUser = await getCurrentAppUser();
     if (!appUser) return mockTrips;
 
-    let query = supabaseAdmin.from("trips").select("*").order("created_at", { ascending: false }).limit(20);
+    let query = supabaseAdmin
+      .from("trips")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
 
     if (!isAdminRole(appUser.role)) {
       query = query.eq("user_id", appUser.id);
@@ -53,77 +85,74 @@ export async function getTrips(): Promise<Trip[]> {
 }
 
 export async function getTripById(tripId: string): Promise<Trip | null> {
+  "use cache";
+  cacheLife({ revalidate: 30, expire: 600 });
+  cacheTag(`trip:${tripId}`);
+
   if (!hasSupabaseEnv()) {
     return mockTrips.find((trip) => trip.id === tripId || trip.public_id === tripId) ?? null;
   }
 
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tripId);
+  const isUuid = UUID_RE.test(tripId);
 
   try {
-    const tripQuery = isUuid
+    const { data } = isUuid
       ? await supabaseAdmin.from("trips").select("*").eq("id", tripId).maybeSingle()
       : await supabaseAdmin.from("trips").select("*").eq("public_id", tripId).maybeSingle();
 
-    if (!tripQuery.data) return null;
-    return tripQuery.data as Trip;
-  } catch {
-    try {
-      const adminQuery = isUuid
-        ? await supabaseAdmin.from("trips").select("*").eq("id", tripId).maybeSingle()
-        : await supabaseAdmin.from("trips").select("*").eq("public_id", tripId).maybeSingle();
-
-      if (!adminQuery.data) return null;
-      return adminQuery.data as Trip;
-    } catch {
-      return null;
+    if (data) {
+      cacheTag(`trip:${data.id}`);
+      cacheTag(`trip:${data.public_id}`);
     }
+
+    return (data as Trip) ?? null;
+  } catch {
+    return null;
   }
 }
 
 export async function getComparisonOptions(tripId: string): Promise<ComparisonOption[]> {
+  "use cache";
+  cacheLife({ revalidate: 30, expire: 600 });
+  cacheTag(`trip:${tripId}:comparison-options`);
+
   if (!hasSupabaseEnv()) return mockComparisonOptions;
 
   try {
-    const { data } = await supabaseAdmin.from("comparison_options").select("*").eq("trip_id", tripId).order("option_number");
-    if (!data || data.length === 0) return mockComparisonOptions;
+    const { data } = await supabaseAdmin
+      .from("comparison_options")
+      .select("*")
+      .eq("trip_id", tripId)
+      .order("option_number");
+
+    if (!data || data.length === 0) return [];
     return data as ComparisonOption[];
   } catch {
-    return mockComparisonOptions;
+    return [];
   }
 }
 
 export async function getItineraryItems(tripId: string): Promise<ItineraryItem[]> {
+  "use cache";
+  cacheLife({ revalidate: 30, expire: 600 });
+  cacheTag(`trip:${tripId}:items`);
+
   if (!hasSupabaseEnv()) {
     return mockItineraryItems.filter((item) => item.trip_id === tripId || tripId === "trip_01");
   }
 
   try {
-    const { data } = await supabaseAdmin.from("itinerary_items").select("*").eq("trip_id", tripId).order("day_number").order("sort_order");
-    if (!data || data.length === 0) {
-      const { data: adminItems } = await supabaseAdmin
-        .from("itinerary_items")
-        .select("*")
-        .eq("trip_id", tripId)
-        .order("day_number")
-        .order("sort_order");
-      if (!adminItems || adminItems.length === 0) return mockItineraryItems;
-      return adminItems as ItineraryItem[];
-    }
+    const { data } = await supabaseAdmin
+      .from("itinerary_items")
+      .select("*")
+      .eq("trip_id", tripId)
+      .order("day_number")
+      .order("sort_order");
+
+    if (!data || data.length === 0) return [];
     return data as ItineraryItem[];
   } catch {
-    try {
-      const { data } = await supabaseAdmin
-        .from("itinerary_items")
-        .select("*")
-        .eq("trip_id", tripId)
-        .order("day_number")
-        .order("sort_order");
-
-      if (!data || data.length === 0) return mockItineraryItems;
-      return data as ItineraryItem[];
-    } catch {
-      return mockItineraryItems;
-    }
+    return [];
   }
 }
 
@@ -132,6 +161,10 @@ export async function getPackingList() {
 }
 
 export async function getVendors(): Promise<VendorSummary[]> {
+  "use cache";
+  cacheLife({ revalidate: 600, expire: 3600 });
+  cacheTag("vendors");
+
   if (!hasSupabaseEnv()) return [];
 
   try {
@@ -167,6 +200,18 @@ export async function getWhatsappLogs(limit = 50) {
   }
 }
 
+type FlaggedQueueRow = {
+  id: string;
+  trip_id: string;
+  item_id: string | null;
+  status: FlaggedQueueItem["status"];
+  requested_change: Record<string, unknown> | null;
+  reviewed_at: string | null;
+  created_at: string;
+  trips: { public_id: string } | { public_id: string }[] | null;
+  itinerary_items: { title: string } | { title: string }[] | null;
+};
+
 export async function getFlaggedQueue(limit = 100): Promise<FlaggedQueueItem[]> {
   if (!hasSupabaseEnv()) return [];
 
@@ -176,30 +221,32 @@ export async function getFlaggedQueue(limit = 100): Promise<FlaggedQueueItem[]> 
 
     const { data } = await supabaseAdmin
       .from("cs_approval_queue")
-      .select("id,trip_id,item_id,status,requested_change,reviewed_at,created_at")
+      .select(
+        "id,trip_id,item_id,status,requested_change,reviewed_at,created_at,trips!inner(public_id),itinerary_items(title)",
+      )
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (!data || data.length === 0) return [];
+    const rows = (data as FlaggedQueueRow[] | null) ?? [];
 
-    const tripIds = [...new Set(data.map((row) => row.trip_id))];
-    const itemIds = [...new Set(data.map((row) => row.item_id).filter(Boolean) as string[])];
+    return rows.map((row) => {
+      const tripRecord = Array.isArray(row.trips) ? row.trips[0] : row.trips;
+      const itemRecord = Array.isArray(row.itinerary_items)
+        ? row.itinerary_items[0]
+        : row.itinerary_items;
 
-    const [tripResult, itemResult] = await Promise.all([
-      supabaseAdmin.from("trips").select("id,public_id").in("id", tripIds),
-      itemIds.length > 0
-        ? supabaseAdmin.from("itinerary_items").select("id,title").in("id", itemIds)
-        : Promise.resolve({ data: [] as Array<{ id: string; title: string }>, error: null }),
-    ]);
-
-    const tripMap = new Map((tripResult.data ?? []).map((trip) => [trip.id, trip.public_id]));
-    const itemMap = new Map((itemResult.data ?? []).map((item) => [item.id, item.title]));
-
-    return data.map((row) => ({
-      ...(row as Omit<FlaggedQueueItem, "trip_public_id" | "item_title">),
-      trip_public_id: tripMap.get(row.trip_id) ?? row.trip_id,
-      item_title: row.item_id ? itemMap.get(row.item_id) ?? null : null,
-    }));
+      return {
+        id: row.id,
+        trip_id: row.trip_id,
+        item_id: row.item_id,
+        status: row.status,
+        requested_change: row.requested_change,
+        reviewed_at: row.reviewed_at,
+        created_at: row.created_at,
+        trip_public_id: tripRecord?.public_id ?? row.trip_id,
+        item_title: itemRecord?.title ?? null,
+      };
+    });
   } catch {
     return [];
   }
@@ -225,6 +272,10 @@ export async function getOpenChatSessions(limit = 50): Promise<CSChatSession[]> 
 }
 
 export async function getTripPhotos(tripId: string): Promise<TripPhoto[]> {
+  "use cache";
+  cacheLife({ revalidate: 30, expire: 300 });
+  cacheTag(`trip:${tripId}:photos`);
+
   if (!hasSupabaseEnv()) return [];
 
   try {
@@ -289,7 +340,12 @@ export async function getTripVendors(tripId: string): Promise<VendorSummary[]> {
   }
 }
 
-export async function getAdminMetrics() {
+export async function getAdminMetrics(adminUserId: string) {
+  "use cache";
+  cacheLife({ revalidate: 120, expire: 1800 });
+  cacheTag("admin:metrics");
+  cacheTag(`admin:${adminUserId}:metrics`);
+
   if (!hasSupabaseEnv()) {
     return {
       tripVolume30d: mockTrips.length,
@@ -302,35 +358,41 @@ export async function getAdminMetrics() {
   }
 
   try {
-    const appUser = await getCurrentAppUser();
-    if (!appUser || !isAdminRole(appUser.role)) {
-      return {
-        tripVolume30d: 0,
-        revenuePlanningFeeIdr: 0,
-        csInterventionRate: 0,
-        avgSatisfaction: null as number | null,
-        flaggedPending: 0,
-        openChats: 0,
-      };
-    }
-
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 30);
 
     const [tripsResult, flaggedResult, openChatsResult, reviewsResult] = await Promise.all([
-      supabaseAdmin.from("trips").select("id,planning_fee_idr,created_at").gte("created_at", fromDate.toISOString()),
-      supabaseAdmin.from("cs_approval_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
-      supabaseAdmin.from("cs_chat_sessions").select("id", { count: "exact", head: true }).eq("status", "open"),
+      supabaseAdmin
+        .from("trips")
+        .select("id,planning_fee_idr,created_at")
+        .gte("created_at", fromDate.toISOString()),
+      supabaseAdmin
+        .from("cs_approval_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending"),
+      supabaseAdmin
+        .from("cs_chat_sessions")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "open"),
       supabaseAdmin.from("vendor_reviews").select("rating"),
     ]);
 
     const tripRows = tripsResult.data ?? [];
-    const revenuePlanningFeeIdr = tripRows.reduce((sum, trip) => sum + (trip.planning_fee_idr ?? 0), 0);
+    const revenuePlanningFeeIdr = tripRows.reduce(
+      (sum, trip) => sum + (trip.planning_fee_idr ?? 0),
+      0,
+    );
 
     const reviewRows = reviewsResult.data ?? [];
-    const avgSatisfaction = reviewRows.length > 0 ? reviewRows.reduce((sum, row) => sum + row.rating, 0) / reviewRows.length : null;
+    const avgSatisfaction =
+      reviewRows.length > 0
+        ? reviewRows.reduce((sum, row) => sum + row.rating, 0) / reviewRows.length
+        : null;
 
-    const csInterventionRate = tripRows.length > 0 ? Number((((flaggedResult.count ?? 0) / tripRows.length) * 100).toFixed(1)) : 0;
+    const csInterventionRate =
+      tripRows.length > 0
+        ? Number((((flaggedResult.count ?? 0) / tripRows.length) * 100).toFixed(1))
+        : 0;
 
     return {
       tripVolume30d: tripRows.length,
@@ -352,6 +414,12 @@ export async function getAdminMetrics() {
   }
 }
 
+type RedeemRpcResult = {
+  ok: boolean;
+  error?: string;
+  new_balance?: number;
+};
+
 export async function redeemPlanningDiscount() {
   if (!hasSupabaseEnv()) {
     return { ok: false, error: "Supabase is not configured" };
@@ -365,7 +433,7 @@ export async function redeemPlanningDiscount() {
 
     const { data: profile } = await supabaseAdmin
       .from("users")
-      .select("id,points_balance,lifetime_points,loyalty_tier")
+      .select("points_balance")
       .eq("id", appUser.id)
       .single();
 
@@ -377,51 +445,28 @@ export async function redeemPlanningDiscount() {
       return { ok: false, error: "Not enough points to redeem" };
     }
 
-    const delta = profile.points_balance >= 1000 ? -1000 : -500;
+    const pointsToDeduct = profile.points_balance >= 1000 ? 1000 : 500;
 
-    const nextPoints = profile.points_balance + delta;
-    const nextLifetime = profile.lifetime_points;
-    const nextTier = tierFromPoints(nextPoints);
+    const { data, error } = await supabaseAdmin.rpc("redeem_planning_points", {
+      p_user_id: appUser.id,
+      p_points_to_deduct: pointsToDeduct,
+    });
 
-    const [updateUser, updatePoints, insertLog] = await Promise.all([
-      supabaseAdmin
-        .from("users")
-        .update({
-          points_balance: nextPoints,
-          loyalty_tier: nextTier,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", appUser.id),
-      supabaseAdmin
-        .from("user_points")
-        .upsert(
-          {
-            user_id: appUser.id,
-            points_balance: nextPoints,
-            lifetime_points: nextLifetime,
-            tier: nextTier,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        ),
-      supabaseAdmin.from("user_points_log").insert({
-        user_id: appUser.id,
-        points_delta: delta,
-        event_type: "redeem_planning_fee",
-        reference_id: `redeem_${Date.now()}`,
-      }),
-    ]);
-
-    if (updateUser.error || updatePoints.error || insertLog.error) {
-      return {
-        ok: false,
-        error: updateUser.error?.message ?? updatePoints.error?.message ?? insertLog.error?.message ?? "Failed to redeem points",
-      };
+    if (error) {
+      return { ok: false, error: error.message };
     }
+
+    const payload = (data ?? null) as RedeemRpcResult | null;
+    if (!payload?.ok) {
+      return { ok: false, error: payload?.error ?? "Failed to redeem points" };
+    }
+
+    revalidateTag(`user:${appUser.id}:profile`, "max");
 
     return {
       ok: true,
-      redeemedPoints: Math.abs(delta),
+      redeemedPoints: pointsToDeduct,
+      newBalance: payload.new_balance ?? null,
     };
   } catch {
     return { ok: false, error: "Failed to redeem points" };

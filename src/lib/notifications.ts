@@ -1,3 +1,5 @@
+import { after } from "next/server";
+
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 type NotificationChannel = "email" | "whatsapp" | "both";
@@ -104,12 +106,23 @@ export async function sendTravelYuNotification(payload: TravelYuNotificationPayl
       method: "POST",
       headers,
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
     });
 
     return { ok: response.ok, skipped: false, status: response.status };
   } catch {
     return { ok: false, skipped: false, status: 0 };
   }
+}
+
+export function scheduleNotification(payload: TravelYuNotificationPayload) {
+  after(async () => {
+    try {
+      await sendTravelYuNotification(payload);
+    } catch {
+      // notification errors must never break request lifecycle
+    }
+  });
 }
 
 export async function resolveTripRecipient(tripId: string): Promise<TripRecipient | null> {

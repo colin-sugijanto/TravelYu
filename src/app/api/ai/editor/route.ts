@@ -1,9 +1,10 @@
 import { streamText, tool } from "ai";
 
+import { getCurrentAppUser } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
 import { itineraryTools } from "@/lib/ai/tools";
 import { model } from "@/lib/ai/openrouter";
-import { getRateLimiter } from "@/lib/rate-limit";
+import { checkAiRateLimit } from "@/lib/rate-limit";
 
 const EDITOR_SYSTEM_PROMPT = `
 Kamu adalah editor itinerary TravelYu.
@@ -18,13 +19,14 @@ Jawab dalam Bahasa Indonesia, ringkas, actionable.
 `;
 
 export async function POST(request: Request) {
-  const limiter = getRateLimiter();
-  if (limiter) {
-    const key = request.headers.get("x-forwarded-for") ?? "anonymous";
-    const result = await limiter.limit(`ai_editor:${key}`);
-    if (!result.success) {
-      return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
-    }
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const blocked = await checkAiRateLimit(appUser.id, "editor");
+  if (blocked) {
+    return blocked;
   }
 
   const { messages, tripId, userId } = (await request.json()) as {

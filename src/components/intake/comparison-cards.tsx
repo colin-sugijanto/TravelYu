@@ -24,6 +24,7 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
     if (isSaving) return;
 
     setIsSaving(true);
+    setErrorMessage(null);
     try {
       const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/select-option`, {
         method: "POST",
@@ -33,7 +34,11 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
 
       if (response.ok) {
         setSelectedOption(optionNumber);
+        return;
       }
+
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      setErrorMessage(payload?.error ?? "Gagal menyimpan opsi terpilih.");
     } finally {
       setIsSaving(false);
     }
@@ -48,6 +53,8 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
     try {
       const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/generate`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedOption }),
       });
 
       const payload = await response.json();
@@ -68,7 +75,7 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
         {options.map((option) => (
-          <Card key={option.id} className="p-5">
+          <Card key={option.id} className="p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl border-[var(--border)]">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">{option.summary.title}</CardTitle>
               <Badge tone={selectedOption === option.option_number ? "brand" : "neutral"}>{selectedOption === option.option_number ? "Selected" : `Option ${option.option_number}`}</Badge>
@@ -111,7 +118,7 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
         ) : null}
       </div>
 
-      <Card className="p-5">
+      <Card className="p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl border-[var(--border)]">
         <CardTitle>Lanjutkan ke Itinerary</CardTitle>
         <CardText className="mt-2">Development mode aktif. Payment di-bypass dan itinerary bisa langsung digenerate.</CardText>
 
@@ -120,7 +127,7 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
         <button
           type="button"
           onClick={generateTrip}
-          disabled={isGenerating || selectedOption === null}
+          disabled={isGenerating || isSaving || selectedOption === null}
           className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-full bg-[var(--brand)] text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isGenerating ? "Generating..." : "Generate Itinerary"}

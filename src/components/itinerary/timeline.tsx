@@ -8,6 +8,15 @@ interface TimelineProps {
 }
 
 export function ItineraryTimeline({ items }: TimelineProps) {
+  if (items.length === 0) {
+    return (
+      <Card className="p-4">
+        <CardTitle>Itinerary</CardTitle>
+        <CardText className="mt-2">Belum ada itinerary untuk trip ini. Coba generate ulang dari halaman comparison.</CardText>
+      </Card>
+    );
+  }
+
   const grouped = items.reduce<Record<number, ItineraryItem[]>>((acc, item) => {
     if (!acc[item.day_number]) acc[item.day_number] = [];
     acc[item.day_number].push(item);

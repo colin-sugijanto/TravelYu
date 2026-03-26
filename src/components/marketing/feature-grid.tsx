@@ -27,17 +27,17 @@ const features = [
 
 export function FeatureGrid() {
   return (
-    <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
       {features.map((item) => {
         const Icon = item.icon;
 
         return (
-          <Card key={item.title} className="p-5">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#d9efe4] text-[var(--brand-strong)]">
-              <Icon className="h-5 w-5" />
+          <Card key={item.title} className="p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[var(--brand)]/10 border-[var(--border)] bg-white group">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand)]/10 text-[var(--brand)] transition-colors duration-300 group-hover:bg-[var(--brand)] group-hover:text-white">
+              <Icon className="h-6 w-6" />
             </span>
-            <CardTitle className="mt-3 text-base">{item.title}</CardTitle>
-            <CardText className="mt-2">{item.body}</CardText>
+            <CardTitle className="mt-5 text-lg font-bold text-[var(--text)] group-hover:text-[var(--brand-blue)] transition-colors">{item.title}</CardTitle>
+            <CardText className="mt-2 text-[var(--text-soft)] leading-relaxed">{item.body}</CardText>
           </Card>
         );
       })}

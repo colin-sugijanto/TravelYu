@@ -1,8 +1,9 @@
 import { streamText } from "ai";
 
+import { getCurrentAppUser } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
 import { model } from "@/lib/ai/openrouter";
-import { getRateLimiter } from "@/lib/rate-limit";
+import { checkAiRateLimit } from "@/lib/rate-limit";
 
 const INTAKE_SYSTEM_PROMPT = `
 Kamu adalah TravelYu AI Intake Agent untuk perencanaan perjalanan Indonesia.
@@ -14,17 +15,20 @@ Aturan:
 - Jika user tidak tahu destinasi, aktifkan mode surprise dan bantu pilih.
 - Jika budget tidak realistis, jelaskan gap dan tawarkan opsi.
 - Setelah 7 parameter terkumpul, rangkum singkat dan minta konfirmasi user.
+- Setelah user mengonfirmasi ringkasan final, akhiri jawaban dengan token persis [INTAKE_COMPLETE] di baris terakhir.
+- Jangan keluarkan token [INTAKE_COMPLETE] sebelum semua parameter wajib benar-benar lengkap.
 - Gaya bahasa: hangat, ringkas, tidak menghakimi.
 `;
 
 export async function POST(request: Request) {
-  const limiter = getRateLimiter();
-  if (limiter) {
-    const key = request.headers.get("x-forwarded-for") ?? "anonymous";
-    const result = await limiter.limit(`ai_intake:${key}`);
-    if (!result.success) {
-      return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
-    }
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const blocked = await checkAiRateLimit(appUser.id, "intake");
+  if (blocked) {
+    return blocked;
   }
 
   const { messages, mode } = (await request.json()) as {

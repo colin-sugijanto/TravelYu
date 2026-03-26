@@ -6,18 +6,27 @@ export async function GET(_: Request, { params }: { params: Promise<{ city: stri
     return Response.json({ error: "OPENWEATHERMAP_API_KEY missing" }, { status: 500 });
   }
 
-  const response = await fetch(
-    `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)},ID&units=metric&appid=${apiKey}`,
-  );
+  let data: unknown;
 
-  if (!response.ok) {
-    return Response.json({ error: "Weather request failed" }, { status: response.status });
+  try {
+    const response = await fetch(
+      `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)},ID&units=metric&appid=${apiKey}`,
+      {
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+
+    if (!response.ok) {
+      return Response.json({ error: "Weather request failed" }, { status: response.status });
+    }
+
+    data = await response.json();
+  } catch {
+    return Response.json({ error: "Weather request timed out" }, { status: 504 });
   }
-
-  const data = await response.json();
 
   return Response.json({
     city,
-    forecast: data?.list?.slice(0, 12) ?? [],
+    forecast: (data as { list?: unknown[] } | null)?.list?.slice(0, 12) ?? [],
   });
 }

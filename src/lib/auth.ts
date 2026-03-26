@@ -1,5 +1,5 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import type { User } from "@supabase/supabase-js";
+import { auth } from "@clerk/nextjs/server";
+import { cache } from "react";
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { UserRole } from "@/types/domain";
@@ -24,29 +24,68 @@ export function isAdminRole(role: UserRole | null | undefined) {
   return role === "admin" || role === "super_admin";
 }
 
-function extractPrimaryEmail(clerkUser: {
-  primaryEmailAddressId: string | null;
-  emailAddresses: Array<{ id: string; emailAddress: string }>;
-}) {
-  return (
-    clerkUser.emailAddresses.find((email) => email.id === clerkUser.primaryEmailAddressId)
-      ?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress ?? null
-  );
-}
-
-function buildDisplayName(clerkUser: {
-  firstName: string | null;
-  lastName: string | null;
-  username: string | null;
-}) {
-  const fullName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim();
-  if (fullName) return fullName;
-  if (clerkUser.username) return clerkUser.username;
-  return "Traveler";
-}
+type SessionClaimsMap = Record<string, unknown>;
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isUniqueViolation(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+
+  const maybeCode = "code" in error ? error.code : undefined;
+  if (maybeCode === "23505") return true;
+
+  const maybeMessage = "message" in error && typeof error.message === "string" ? error.message.toLowerCase() : "";
+  return maybeMessage.includes("duplicate key value") || maybeMessage.includes("unique constraint");
+}
+
+function buildDisplayName(user: {
+  fullName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  username?: string | null;
+}) {
+  if (user.fullName?.trim()) return user.fullName.trim();
+
+  const joinedName = [user.firstName, user.lastName]
+    .filter((part) => Boolean(part && part.trim()))
+    .join(" ")
+    .trim();
+
+  if (joinedName) return joinedName;
+  if (user.username?.trim()) return user.username.trim();
+  return "Traveler";
+}
+
+function getClaimString(claims: SessionClaimsMap, key: string): string | null {
+  const value = claims[key];
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function buildProfileFromClaims(clerkId: string, claims: SessionClaimsMap) {
+  const emailRaw =
+    getClaimString(claims, "email") ??
+    getClaimString(claims, "email_address") ??
+    getClaimString(claims, "primary_email_address");
+
+  const fullName = buildDisplayName({
+    fullName: getClaimString(claims, "full_name"),
+    firstName: getClaimString(claims, "given_name") ?? getClaimString(claims, "first_name"),
+    lastName: getClaimString(claims, "family_name") ?? getClaimString(claims, "last_name"),
+    username: getClaimString(claims, "preferred_username") ?? getClaimString(claims, "username") ?? clerkId,
+  });
+
+  return {
+    fullName,
+    email: emailRaw ? normalizeEmail(emailRaw) : null,
+  };
 }
 
 async function findUserByClerkId(clerkId: string) {
@@ -59,6 +98,21 @@ async function findUserByClerkId(clerkId: string) {
   return (data as AppUserRow | null) ?? null;
 }
 
+async function findUserByClerkIdWithRetries(clerkId: string) {
+  const maxAttempts = 4;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const user = await findUserByClerkId(clerkId);
+    if (user) return user;
+
+    if (attempt < maxAttempts) {
+      await wait(50 * attempt);
+    }
+  }
+
+  return null;
+}
+
 async function findUserByEmail(email: string) {
   const { data } = await supabaseAdmin
     .from("users")
@@ -69,187 +123,97 @@ async function findUserByEmail(email: string) {
   return (data as AppUserRow | null) ?? null;
 }
 
-async function findAuthUserByEmail(email: string) {
-  const normalized = normalizeEmail(email);
-  let page = 1;
+async function claimUserByEmail(clerkId: string, fullName: string, email: string) {
+  const existing = await findUserByEmail(email);
+  if (!existing) return null;
+  if (existing.clerk_id && existing.clerk_id !== clerkId) return null;
+  if (existing.clerk_id === clerkId) return existing;
 
-  while (page <= 10) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page,
-      perPage: 200,
-    });
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({
+      clerk_id: clerkId,
+      full_name: existing.full_name ?? fullName,
+      email,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", existing.id)
+    .select("id,full_name,email,role,clerk_id")
+    .maybeSingle();
 
-    if (error) return null;
+  if (error) {
+    if (isUniqueViolation(error)) {
+      const byClerkId = await findUserByClerkIdWithRetries(clerkId);
+      if (byClerkId) return byClerkId;
+    }
+    return null;
+  }
 
-    const matched = data.users.find((user) => (user.email ? normalizeEmail(user.email) : "") === normalized) ?? null;
-    if (matched) return matched;
-
-    if (data.users.length < 200) break;
-    page += 1;
+  if (data) {
+    return data as AppUserRow;
   }
 
   return null;
 }
 
-async function ensurePublicUserRow(userId: string, clerkId: string, fullName: string, email: string | null) {
-  const { error } = await supabaseAdmin.from("users").upsert(
-    {
-      id: userId,
-      clerk_id: clerkId,
-      full_name: fullName,
-      email,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: "id",
-    },
-  );
+async function createPublicUser(clerkId: string, fullName: string, email: string | null) {
+  const normalizedEmail = email ? normalizeEmail(email) : null;
 
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function ensureShadowUser(clerkId: string, fullName: string, email: string | null) {
-  const fallbackEmail = `clerk+${clerkId}@travelyu.local`;
-  const authEmail = email ? normalizeEmail(email) : fallbackEmail;
-
-  if (email) {
-    const existingAuthUser = await findAuthUserByEmail(authEmail);
-    if (existingAuthUser) {
-      await ensurePublicUserRow(existingAuthUser.id, clerkId, fullName, authEmail);
-      return existingAuthUser.id;
-    }
-  }
-
-  const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-    email: authEmail,
-    email_confirm: true,
-    user_metadata: {
-      full_name: fullName,
-    },
-    app_metadata: {
-      provider: "clerk",
-      clerk_id: clerkId,
-    },
-  });
-
-  if (createError || !created.user) {
-    const existingByEmail = await findUserByEmail(authEmail);
-    if (existingByEmail) {
-      await supabaseAdmin
-        .from("users")
-        .update({
-          clerk_id: clerkId,
-          full_name: fullName,
-          email: authEmail,
-        })
-        .eq("id", existingByEmail.id);
-
-      return existingByEmail.id;
-    }
-
-    const existingAuthUser = await findAuthUserByEmail(authEmail);
-    if (existingAuthUser) {
-      await ensurePublicUserRow(existingAuthUser.id, clerkId, fullName, authEmail);
-      return existingAuthUser.id;
-    }
-
-    throw new Error(createError?.message ?? "Failed to create shadow auth user");
-  }
-
-  const shadowUserId = created.user.id;
-  await ensurePublicUserRow(shadowUserId, clerkId, fullName, authEmail);
-
-  return shadowUserId;
-}
-
-async function loadOrCreateAppUser(clerkId: string, fullName: string, email: string | null) {
-  let appUser = await findUserByClerkId(clerkId);
-
-  if (!appUser && email) {
-    appUser = await findUserByEmail(email);
-  }
-
-  if (!appUser) {
-    const shadowUserId = await ensureShadowUser(clerkId, fullName, email);
-    const { data } = await supabaseAdmin
-      .from("users")
-      .select("id,full_name,email,role,clerk_id")
-      .eq("id", shadowUserId)
-      .single();
-    appUser = (data as AppUserRow | null) ?? null;
-  }
-
-  if (!appUser) return null;
-
-  const normalizedEmail = email ? normalizeEmail(email) : appUser.email;
-  const needUpdate = !appUser.clerk_id || appUser.full_name !== fullName || appUser.email !== normalizedEmail;
-
-  if (needUpdate) {
-    await supabaseAdmin
-      .from("users")
-      .update({
-        clerk_id: clerkId,
-        full_name: fullName,
-        email: normalizedEmail,
-      })
-      .eq("id", appUser.id);
-
-    appUser = {
-      ...appUser,
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .insert({
       clerk_id: clerkId,
       full_name: fullName,
       email: normalizedEmail,
-    };
+    })
+    .select("id,full_name,email,role,clerk_id")
+    .single();
+
+  if (!error && data) {
+    return data as AppUserRow;
   }
 
-  return appUser;
+  const byClerkId = await findUserByClerkIdWithRetries(clerkId);
+  if (byClerkId) return byClerkId;
+
+  if (normalizedEmail) {
+    const claimed = await claimUserByEmail(clerkId, fullName, normalizedEmail);
+    if (claimed) return claimed;
+  }
+
+  if (isUniqueViolation(error)) {
+    const byClerkIdAfterConflict = await findUserByClerkIdWithRetries(clerkId);
+    if (byClerkIdAfterConflict) return byClerkIdAfterConflict;
+  }
+
+  throw new Error(error?.message ?? "Failed to create user profile");
 }
 
-export async function getCurrentAppUser(): Promise<AppUserContext | null> {
-  const { userId: clerkId } = await auth();
+export const getCurrentAppUser = cache(async (): Promise<AppUserContext | null> => {
+  const authContext = await auth();
+  const clerkId = authContext.userId;
   if (!clerkId) return null;
 
-  const client = await clerkClient();
-  const clerkUser = await client.users.getUser(clerkId);
-  const email = extractPrimaryEmail(clerkUser);
-  const fullName = buildDisplayName(clerkUser);
+  const claims = (authContext.sessionClaims ?? {}) as SessionClaimsMap;
+  const { fullName, email } = buildProfileFromClaims(clerkId, claims);
 
-  const appUser = await loadOrCreateAppUser(clerkId, fullName, email);
+  let appUser = await findUserByClerkId(clerkId);
+
+  if (!appUser && email) {
+    appUser = await claimUserByEmail(clerkId, fullName, email);
+  }
+
+  if (!appUser) {
+    appUser = await createPublicUser(clerkId, fullName, email);
+  }
+
   if (!appUser) return null;
 
   return {
     id: appUser.id,
     clerkId,
-    fullName,
+    fullName: appUser.full_name ?? fullName,
     role: appUser.role,
-    email: email ? normalizeEmail(email) : appUser.email,
+    email: appUser.email ?? email,
   };
-}
-
-export async function getCurrentSupabaseUser(): Promise<User | null> {
-  const appUser = await getCurrentAppUser();
-  if (!appUser) return null;
-
-  return {
-    id: appUser.id,
-    aud: "authenticated",
-    role: "authenticated",
-    email: appUser.email ?? undefined,
-    phone: undefined,
-    app_metadata: {
-      provider: "clerk",
-      clerk_id: appUser.clerkId,
-    },
-    user_metadata: {
-      full_name: appUser.fullName,
-      clerk_id: appUser.clerkId,
-    },
-    identities: [],
-    factors: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    is_anonymous: false,
-  };
-}
+});

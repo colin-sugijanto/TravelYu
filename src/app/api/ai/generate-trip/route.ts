@@ -1,10 +1,22 @@
 import { generateText, tool } from "ai";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { searchIndonesiaPlaces } from "@/lib/ai/tavily";
+import { getCurrentAppUser } from "@/lib/auth";
 import { model } from "@/lib/ai/openrouter";
-import { resolveTripRecipient, sendTravelYuNotification } from "@/lib/notifications";
+import { parseAiProviderError } from "@/lib/ai/errors";
+import { checkAiRateLimit } from "@/lib/rate-limit";
+import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+
+type ComparisonSummary = {
+  title?: string;
+  destinationHighlights?: string[];
+  vibeTags?: string[];
+  estimatedBudgetIdr?: number;
+  rationale?: string;
+};
 
 const saveItineraryTool = tool({
   description: "Save generated itinerary items to Supabase",
@@ -41,17 +53,39 @@ const saveItineraryTool = tool({
       source: item.source,
     }));
 
-    await supabaseAdmin.from("itinerary_items").insert(rows);
-    await supabaseAdmin
+    const { error: insertError } = await supabaseAdmin.from("itinerary_items").insert(rows);
+    if (insertError) {
+      return { ok: false, error: insertError.message };
+    }
+
+    const { error: updateError } = await supabaseAdmin
       .from("trips")
       .update({ status: "draft", total_est_cost_idr: input.totalEstCostIdr, updated_at: new Date().toISOString() })
       .eq("id", input.tripId);
+
+    if (updateError) {
+      return { ok: false, error: updateError.message };
+    }
+
+    revalidateTag(`trip:${input.tripId}:items`, "max");
+    revalidateTag(`trip:${input.tripId}`, "max");
+    revalidateTag("admin:metrics", "max");
 
     return { ok: true, itemCount: rows.length };
   },
 });
 
 export async function POST(request: Request) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const blocked = await checkAiRateLimit(appUser.id, "generate-trip");
+  if (blocked) {
+    return blocked;
+  }
+
   if (!process.env.OPENROUTER_API_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return Response.json({ error: "AI itinerary generation service is not configured" }, { status: 503 });
   }
@@ -59,6 +93,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     tripId: string;
     intakeData?: Record<string, unknown>;
+    selectedOption?: number;
   };
 
   if (!body.tripId) {
@@ -67,7 +102,7 @@ export async function POST(request: Request) {
 
   const { data: trip, error: tripError } = await supabaseAdmin
     .from("trips")
-    .select("id,intake_data,selected_comparison_option")
+    .select("id,user_id,intake_data,selected_comparison_option")
     .eq("id", body.tripId)
     .single();
 
@@ -75,60 +110,139 @@ export async function POST(request: Request) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  await supabaseAdmin.from("trips").update({ status: "generating" }).eq("id", body.tripId);
+  if (trip.user_id !== appUser.id && appUser.role !== "admin" && appUser.role !== "super_admin") {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  await supabaseAdmin
+    .from("trips")
+    .update({ status: "generating", updated_at: new Date().toISOString() })
+    .eq("id", body.tripId);
 
   const intakeData = body.intakeData ?? ((trip.intake_data as Record<string, unknown> | null) ?? {});
-  const comparisonOption = trip.selected_comparison_option ?? 1;
+  const comparisonOption = body.selectedOption ?? trip.selected_comparison_option;
 
-  const result = await generateText({
-    model,
-    maxRetries: 2,
-    system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
-    prompt: `
+  if (!comparisonOption || comparisonOption < 1 || comparisonOption > 3) {
+    await supabaseAdmin
+      .from("trips")
+      .update({ status: "intake", updated_at: new Date().toISOString() })
+      .eq("id", body.tripId);
+
+    return Response.json({ error: "Pilih opsi comparison dulu sebelum generate itinerary." }, { status: 400 });
+  }
+
+  const { data: selectedOptionRow, error: selectedOptionError } = await supabaseAdmin
+    .from("comparison_options")
+    .select("summary")
+    .eq("trip_id", body.tripId)
+    .eq("option_number", comparisonOption)
+    .maybeSingle();
+
+  if (selectedOptionError || !selectedOptionRow) {
+    await supabaseAdmin
+      .from("trips")
+      .update({ status: "intake", updated_at: new Date().toISOString() })
+      .eq("id", body.tripId);
+
+    return Response.json(
+      { error: "Opsi comparison terpilih tidak ditemukan. Coba generate comparison ulang." },
+      { status: 400 },
+    );
+  }
+
+  const selectedSummary = (selectedOptionRow.summary ?? {}) as ComparisonSummary;
+
+  const selectedOptionContext = {
+    optionNumber: comparisonOption,
+    title: selectedSummary.title ?? "",
+    destinationHighlights: Array.isArray(selectedSummary.destinationHighlights)
+      ? selectedSummary.destinationHighlights
+      : [],
+    vibeTags: Array.isArray(selectedSummary.vibeTags) ? selectedSummary.vibeTags : [],
+    estimatedBudgetIdr:
+      typeof selectedSummary.estimatedBudgetIdr === "number"
+        ? selectedSummary.estimatedBudgetIdr
+        : null,
+    rationale: selectedSummary.rationale ?? "",
+  };
+
+  try {
+    const result = await generateText({
+      model,
+      maxRetries: 2,
+      system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
+      prompt: `
 You are TravelYu itinerary generation engine.
 
 Trip ID: ${body.tripId}
 Intake data: ${JSON.stringify(intakeData)}
 Selected comparison option: ${comparisonOption}
+Selected option details: ${JSON.stringify(selectedOptionContext)}
 
 Generate a 3-5 day itinerary with complete item fields.
+The generated itinerary MUST follow the selected option details (destinations, vibe, and budget direction).
 After generation, call save_itinerary tool with structured payload.
 
 If you need fresh activity ideas, use search_indonesia_places tool.
 `,
-    tools: {
-      save_itinerary: saveItineraryTool,
-      search_indonesia_places: tool({
-        description: "Search Indonesian places, attractions, restaurants, and activities.",
-        inputSchema: z.object({
-          query: z.string(),
-          limit: z.number().int().min(1).max(8).default(5),
+      tools: {
+        save_itinerary: saveItineraryTool,
+        search_indonesia_places: tool({
+          description: "Search Indonesian places, attractions, restaurants, and activities.",
+          inputSchema: z.object({
+            query: z.string(),
+            limit: z.number().int().min(1).max(8).default(5),
+          }),
+          execute: async ({ query, limit }) => {
+            const results = await searchIndonesiaPlaces(query, limit);
+            return {
+              ok: true,
+              results,
+            };
+          },
         }),
-        execute: async ({ query, limit }) => {
-          const results = await searchIndonesiaPlaces(query, limit);
-          return {
-            ok: true,
-            results,
-          };
-        },
-      }),
-    },
-  });
-
-  const recipient = await resolveTripRecipient(body.tripId);
-  if (recipient) {
-    await sendTravelYuNotification({
-      eventType: "itinerary_ready",
-      tripId: recipient.tripId,
-      userName: recipient.userName,
-      email: recipient.email,
-      phoneE164: recipient.phoneE164,
-      channelPreference: "both",
+      },
     });
-  }
 
-  return Response.json({
-    ok: true,
-    message: result.text,
-  });
+    const recipient = await resolveTripRecipient(body.tripId);
+    if (recipient) {
+      scheduleNotification({
+        eventType: "itinerary_ready",
+        tripId: recipient.tripId,
+        userName: recipient.userName,
+        email: recipient.email,
+        phoneE164: recipient.phoneE164,
+        channelPreference: "both",
+      });
+    }
+
+    return Response.json({
+      ok: true,
+      message: result.text,
+    });
+  } catch (error) {
+    await supabaseAdmin
+      .from("trips")
+      .update({ status: "intake", updated_at: new Date().toISOString() })
+      .eq("id", body.tripId);
+
+    const parsed = parseAiProviderError(error, {
+      defaultMessage: "AI itinerary gagal sementara. Coba generate ulang dalam beberapa saat.",
+      rateLimitedMessage: "Layanan AI sedang padat (rate-limited). Coba lagi 20-60 detik lagi.",
+    });
+
+    return Response.json(
+      {
+        error: parsed.userMessage,
+      },
+      {
+        status: parsed.isRateLimited ? 429 : 503,
+        headers: parsed.retryAfterSeconds
+          ? {
+              "Retry-After": String(parsed.retryAfterSeconds),
+            }
+          : undefined,
+      },
+    );
+  }
 }

@@ -24,3 +24,21 @@ export function getRateLimiter() {
 
   return limiter;
 }
+
+export async function checkAiRateLimit(userId: string, scope = "general"): Promise<Response | null> {
+  const ratelimiter = getRateLimiter();
+  if (!ratelimiter) return null;
+
+  const { success, reset } = await ratelimiter.limit(`ai:${scope}:${userId}`);
+  if (success) return null;
+
+  const retryAfterSeconds = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
+
+  return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait a moment." }), {
+    status: 429,
+    headers: {
+      "Content-Type": "application/json",
+      "Retry-After": String(retryAfterSeconds),
+    },
+  });
+}

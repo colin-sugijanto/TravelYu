@@ -73,7 +73,7 @@ export function EditorChat({
           <p className="text-sm text-[var(--text-soft)]">Contoh: &quot;Tukar resto hari 2 ke opsi vegetarian yang lebih dekat&quot;</p>
         ) : (
           normalizedMessages.map((message) => (
-            <div key={message.id} className={message.role === "user" ? "rounded-xl bg-[#d9efe4] p-2 text-sm" : "rounded-xl bg-white p-2 text-sm"}>
+            <div key={message.id} className={message.role === "user" ? "rounded-xl bg-blue-100 text-blue-900 p-2 text-sm" : "rounded-xl bg-white p-2 text-sm"}>
               {extractTextFromParts(message.parts)}
             </div>
           ))

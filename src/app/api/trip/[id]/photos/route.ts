@@ -1,5 +1,6 @@
 import { getCurrentAppUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { revalidateTag } from "next/cache";
 
 function sanitizeFileName(input: string) {
   return input
@@ -124,6 +125,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: insertError.message }, { status: 500 });
   }
 
+  revalidateTag(`trip:${trip.id}:photos`, "max");
+
   return Response.json({ ok: true });
 }
 
@@ -165,6 +168,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     supabaseAdmin.storage.from("trip-photos").remove([photo.storage_path]),
     supabaseAdmin.from("trip_photos").delete().eq("id", photo.id),
   ]);
+
+  revalidateTag(`trip:${trip.id}:photos`, "max");
 
   return Response.json({ ok: true });
 }

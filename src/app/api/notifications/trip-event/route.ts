@@ -1,4 +1,4 @@
-import { resolveTripRecipient, sendTravelYuNotification } from "@/lib/notifications";
+import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 
 const allowedEvents = new Set([
   "itinerary_ready",
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Trip or recipient not found" }, { status: 404 });
   }
 
-  const result = await sendTravelYuNotification({
+  scheduleNotification({
     eventType: body.eventType as "itinerary_ready" | "cs_approved" | "trip_reminder_h1",
     tripId: recipient.tripId,
     userName: recipient.userName,
@@ -43,5 +43,5 @@ export async function POST(request: Request) {
     channelPreference: body.channelPreference ?? "both",
   });
 
-  return Response.json({ ok: result.ok, skipped: result.skipped ?? false });
+  return Response.json({ ok: true, queued: true });
 }

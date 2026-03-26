@@ -1,12 +1,34 @@
+import { generateText } from "ai";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
+import { model } from "@/lib/ai/openrouter";
 import { searchIndonesiaPlaces } from "@/lib/ai/tavily";
-import { normalizePhoneToE164, sendTravelYuNotification } from "@/lib/notifications";
+import { normalizePhoneToE164, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isMajorChange } from "@/lib/utils";
 
 function isServiceConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function extractJsonArray(text: string): string[] | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);
+  } catch {
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return null;
+
+    try {
+      const parsed = JSON.parse(match[0]) as unknown;
+      if (!Array.isArray(parsed)) return null;
+      return parsed.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);
+    } catch {
+      return null;
+    }
+  }
 }
 
 export const itineraryTools = {
@@ -30,7 +52,7 @@ export const itineraryTools = {
 
       const { data: item } = await supabaseAdmin
         .from("itinerary_items")
-        .select("id,status")
+        .select("id,status,trip_id")
         .eq("id", input.itemId)
         .single();
 
@@ -39,7 +61,7 @@ export const itineraryTools = {
         return { ok: false, reason: "Item is locked; use flag_for_cs_approval" };
       }
 
-      await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from("itinerary_items")
         .update({
           ...(input.title ? { title: input.title } : {}),
@@ -48,6 +70,13 @@ export const itineraryTools = {
           ...(input.timeSlot ? { time_slot: input.timeSlot } : {}),
         })
         .eq("id", input.itemId);
+
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+
+      revalidateTag(`trip:${item.trip_id}:items`, "max");
+      revalidateTag(`trip:${item.trip_id}`, "max");
 
       return { ok: true };
     },
@@ -88,6 +117,11 @@ export const itineraryTools = {
         source: "manual_cs",
       });
 
+      if (!error) {
+        revalidateTag(`trip:${input.tripId}:items`, "max");
+        revalidateTag(`trip:${input.tripId}`, "max");
+      }
+
       return { ok: !error, error: error?.message };
     },
   },
@@ -105,16 +139,29 @@ export const itineraryTools = {
       if (!item) return { ok: false, reason: "Item not found" };
 
       if (item.status === "booked_locked") {
-        await supabaseAdmin.from("cs_approval_queue").insert({
+        const { error } = await supabaseAdmin.from("cs_approval_queue").insert({
           trip_id: item.trip_id,
           item_id: item.id,
           requested_change: { type: "delete_item" },
           status: "pending",
         });
+
+        if (error) {
+          return { ok: false, error: error.message };
+        }
+
+        revalidateTag("admin:metrics", "max");
+        revalidateTag(`trip:${item.trip_id}:items`, "max");
         return { ok: true, flagged: true };
       }
 
-      await supabaseAdmin.from("itinerary_items").delete().eq("id", itemId);
+      const { error } = await supabaseAdmin.from("itinerary_items").delete().eq("id", itemId);
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+
+      revalidateTag(`trip:${item.trip_id}:items`, "max");
+      revalidateTag(`trip:${item.trip_id}`, "max");
       return { ok: true, flagged: false };
     },
   },
@@ -144,6 +191,12 @@ export const itineraryTools = {
         },
         status: "pending",
       });
+
+      if (!error) {
+        revalidateTag("admin:metrics", "max");
+        revalidateTag(`trip:${input.tripId}:items`, "max");
+      }
+
       return { ok: !error, error: error?.message };
     },
   },
@@ -158,17 +211,26 @@ export const itineraryTools = {
     execute: async (input: { query: string; city?: string; limit: number }) => {
       if (!isServiceConfigured()) return { ok: false, alternatives: [] };
 
-      let statement = supabaseAdmin.from("vendors").select("id,name,type,city,price_tier,avg_rating").ilike("name", `%${input.query}%`);
+      let statement = supabaseAdmin
+        .from("vendors")
+        .select("id,name,type,city,price_tier,avg_rating")
+        .ilike("name", `%${input.query}%`);
 
       if (input.city) {
         statement = statement.ilike("city", `%${input.city}%`);
       }
 
-      const { data } = await statement.limit(input.limit);
-      const internalAlternatives = data ?? [];
-
       const searchQuery = input.city ? `${input.query} ${input.city}` : input.query;
-      const tavilyResults = await searchIndonesiaPlaces(searchQuery, input.limit);
+      const [internalResult, tavilyResult] = await Promise.allSettled([
+        statement.limit(input.limit),
+        searchIndonesiaPlaces(searchQuery, input.limit),
+      ]);
+
+      const internalAlternatives =
+        internalResult.status === "fulfilled" ? (internalResult.value.data ?? []) : [];
+
+      const tavilyResults =
+        tavilyResult.status === "fulfilled" ? tavilyResult.value : [];
 
       const webAlternatives = tavilyResults.map((result, index) => ({
         id: `web-${index + 1}`,
@@ -211,7 +273,7 @@ export const itineraryTools = {
 
       const major = isMajorChange(input);
       if (item.status !== "draft" || major) {
-        await supabaseAdmin.from("cs_approval_queue").insert({
+        const { error } = await supabaseAdmin.from("cs_approval_queue").insert({
           trip_id: input.tripId,
           item_id: input.itemId,
           requested_change: {
@@ -221,10 +283,27 @@ export const itineraryTools = {
           },
           status: "pending",
         });
+
+        if (error) {
+          return { ok: false, reason: error.message };
+        }
+
+        revalidateTag("admin:metrics", "max");
+        revalidateTag(`trip:${input.tripId}:items`, "max");
         return { ok: true, flagged: true };
       }
 
-      await supabaseAdmin.from("itinerary_items").update({ vendor_id: input.newVendorId }).eq("id", input.itemId);
+      const { error } = await supabaseAdmin
+        .from("itinerary_items")
+        .update({ vendor_id: input.newVendorId })
+        .eq("id", input.itemId);
+
+      if (error) {
+        return { ok: false, reason: error.message };
+      }
+
+      revalidateTag(`trip:${input.tripId}:items`, "max");
+      revalidateTag(`trip:${input.tripId}`, "max");
       return { ok: true, flagged: false };
     },
   },
@@ -250,6 +329,10 @@ export const itineraryTools = {
         .select("id")
         .single();
 
+      if (!error) {
+        revalidateTag("admin:metrics", "max");
+      }
+
       return { ok: !error, sessionId: data?.id, error: error?.message };
     },
   },
@@ -269,7 +352,7 @@ export const itineraryTools = {
       const phoneE164 = normalizePhoneToE164(vendor.whatsapp_number);
       if (!phoneE164) return { ok: false, reason: "Vendor WA number is invalid" };
 
-      const result = await sendTravelYuNotification({
+      scheduleNotification({
         eventType: "vendor_contact",
         tripId: null,
         userName: "TravelYu CS",
@@ -282,10 +365,10 @@ export const itineraryTools = {
         recipient_type: "vendor",
         recipient_id: vendor.id,
         message: input.message,
-        status: result.ok ? "sent" : "failed",
+        status: "queued",
       });
 
-      return { ok: result.ok };
+      return { ok: true, queued: true };
     },
   },
 
@@ -298,23 +381,30 @@ export const itineraryTools = {
         return { ok: false, reason: "OPENWEATHERMAP_API_KEY is missing" };
       }
 
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)},ID&units=metric&appid=${apiKey}`,
-      );
+      try {
+        const response = await fetch(
+          `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)},ID&units=metric&appid=${apiKey}`,
+          {
+            signal: AbortSignal.timeout(5000),
+          },
+        );
 
-      if (!response.ok) {
-        return { ok: false, reason: "Weather API request failed" };
+        if (!response.ok) {
+          return { ok: false, reason: "Weather API request failed" };
+        }
+
+        const payload = await response.json();
+        const next = payload?.list?.[0];
+
+        return {
+          ok: true,
+          city,
+          summary: next?.weather?.[0]?.description ?? "unknown",
+          temp: next?.main?.temp ?? null,
+        };
+      } catch {
+        return { ok: false, reason: "Weather API request timed out" };
       }
-
-      const payload = await response.json();
-      const next = payload?.list?.[0];
-
-      return {
-        ok: true,
-        city,
-        summary: next?.weather?.[0]?.description ?? "unknown",
-        temp: next?.main?.temp ?? null,
-      };
     },
   },
 
@@ -326,14 +416,48 @@ export const itineraryTools = {
       activities: z.array(z.string()).optional(),
     }),
     execute: async (input: { destination: string; durationDays: number; activities?: string[] }) => {
-      const base = ["Sunblock", "Powerbank", "Reusable bottle", "Travel documents", "Basic medicine"];
-      const activityExtras = (input.activities ?? []).includes("beach") ? ["Sandals", "Dry bag"] : [];
+      const fallback = [
+        "Sunblock",
+        "Powerbank",
+        "Reusable bottle",
+        "Travel documents",
+        "Basic medicine",
+      ];
 
-      return {
-        ok: true,
-        destination: input.destination,
-        items: [...base, ...activityExtras].map((item) => ({ item, checked: false })),
-      };
+      const activityExtras = (input.activities ?? []).includes("beach")
+        ? ["Sandals", "Dry bag"]
+        : [];
+
+      try {
+        const { text } = await generateText({
+          model,
+          maxRetries: 1,
+          prompt: `Generate a concise packing list for a ${input.durationDays}-day trip to ${input.destination}.
+Activities: ${(input.activities ?? []).join(", ") || "general tourism"}.
+Return only a JSON array of strings.`,
+        });
+
+        const parsed = extractJsonArray(text);
+        if (!parsed || parsed.length === 0) {
+          throw new Error("model_output_invalid");
+        }
+
+        const unique = [...new Set(parsed)].slice(0, 30);
+
+        return {
+          ok: true,
+          destination: input.destination,
+          items: unique.map((item) => ({ item, checked: false })),
+        };
+      } catch {
+        const merged = [...new Set([...fallback, ...activityExtras])];
+
+        return {
+          ok: true,
+          destination: input.destination,
+          items: merged.map((item) => ({ item, checked: false })),
+        };
+      }
     },
   },
 };

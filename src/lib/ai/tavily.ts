@@ -12,22 +12,27 @@ export async function searchIndonesiaPlaces(query: string, limit = 5): Promise<T
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) return [];
 
-  const response = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query: `${query} Indonesia travel`,
-      max_results: limit,
-      search_depth: "basic",
-      include_raw_content: false,
-    }),
-  });
+  try {
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query: `${query} Indonesia travel`,
+        max_results: limit,
+        search_depth: "basic",
+        include_raw_content: false,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
 
-  if (!response.ok) return [];
+    if (!response.ok) return [];
 
-  const payload = (await response.json()) as TavilyResponse;
-  return payload.results ?? [];
+    const payload = (await response.json()) as TavilyResponse;
+    return payload.results ?? [];
+  } catch {
+    return [];
+  }
 }

@@ -2,6 +2,8 @@ import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { getCurrentAppUser } from "@/lib/auth";
 import { getProfile } from "@/lib/data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { revalidateTag } from "next/cache";
+import { redirect } from "next/navigation";
 
 async function updateProfile(formData: FormData) {
   "use server";
@@ -31,10 +33,17 @@ async function updateProfile(formData: FormData) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", appUser.id);
+
+  revalidateTag(`user:${appUser.id}:profile`, "max");
 }
 
 export default async function ProfilePage() {
-  const profile = await getProfile();
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
+    redirect("/login?next=%2Fprofile");
+  }
+
+  const profile = await getProfile(appUser.id);
   const initialVibe = Array.isArray(profile.travel_preferences?.vibe) ? profile.travel_preferences?.vibe.join(", ") : "";
   const initialBudgetTier = profile.travel_preferences?.budget_tier ?? "";
 

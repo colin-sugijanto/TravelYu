@@ -1,12 +1,19 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { AdminFlagQueue } from "@/components/admin/flag-queue";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { getAdminMetrics, getFlaggedQueue } from "@/lib/data";
 import { formatIdr } from "@/lib/utils";
 
 export default async function AdminHomePage() {
-  const [metrics, flaggedItems] = await Promise.all([getAdminMetrics(), getFlaggedQueue(8)]);
+  const appUser = await getCurrentAppUser();
+  if (!appUser || !isAdminRole(appUser.role)) {
+    redirect("/dashboard");
+  }
+
+  const [metrics, flaggedItems] = await Promise.all([getAdminMetrics(appUser.id), getFlaggedQueue(8)]);
 
   const cards = [
     { title: "Trip Queue (30d)", value: `${metrics.tripVolume30d} trips`, href: "/admin/trips" },

@@ -1,4 +1,7 @@
+import { revalidateTag } from "next/cache";
+
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
+import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function PATCH(
@@ -93,6 +96,28 @@ export async function PATCH(
         updated_at: new Date().toISOString(),
       })
       .eq("id", queueItem.item_id);
+  }
+
+  revalidateTag(`trip:${id}:items`, "max");
+  revalidateTag(`trip:${id}`, "max");
+  if (queueItem.trip_id && queueItem.trip_id !== id) {
+    revalidateTag(`trip:${queueItem.trip_id}:items`, "max");
+    revalidateTag(`trip:${queueItem.trip_id}`, "max");
+  }
+  revalidateTag("admin:metrics", "max");
+
+  if (action === "approve" || action === "edit_manual") {
+    const recipient = await resolveTripRecipient(queueItem.trip_id);
+    if (recipient) {
+      scheduleNotification({
+        eventType: "cs_approved",
+        tripId: recipient.tripId,
+        userName: recipient.userName,
+        email: recipient.email,
+        phoneE164: recipient.phoneE164,
+        channelPreference: "both",
+      });
+    }
   }
 
   return Response.json({ ok: true });
