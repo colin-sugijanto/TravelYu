@@ -170,6 +170,7 @@ export async function POST(request: Request) {
     const result = await generateText({
       model,
       maxRetries: 2,
+      maxSteps: 5,
       system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
       prompt: `
 You are TravelYu itinerary generation engine.

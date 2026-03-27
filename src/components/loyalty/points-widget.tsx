@@ -24,7 +24,7 @@ export function PointsWidget({ points, tier }: PointsWidgetProps) {
       
       <div className="flex items-center justify-between mb-4 relative z-10">
         <CardTitle className="text-xl font-bold flex items-center gap-2">
-          Loyalty Points <Sparkles className="w-5 h-5 text-[var(--sun)]" />
+          Poin Loyalitas <Sparkles className="w-5 h-5 text-[var(--sun)]" />
         </CardTitle>
         <span className="px-3 py-1 rounded-full bg-blue-50 text-[var(--brand-blue-strong)] text-xs font-bold uppercase tracking-wider">
           {tier}
@@ -38,7 +38,7 @@ export function PointsWidget({ points, tier }: PointsWidgetProps) {
         
         <div className="space-y-2">
           <div className="flex justify-between text-xs font-bold text-[var(--text-soft)]">
-            <span>Progress to next reward</span>
+            <span>Progres ke reward berikutnya</span>
             <span>{progress}%</span>
           </div>
           <Progress className="h-2.5" value={progress} />

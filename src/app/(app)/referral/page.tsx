@@ -6,9 +6,9 @@ import { RedeemPointsButton } from "@/components/loyalty/redeem-points-button";
 import { redirect } from "next/navigation";
 
 function rewardFromPoints(points: number) {
-  if (points >= 1000) return "Free planning fee available";
-  if (points >= 500) return `Eligible for ${formatIdr(50000)} planning fee discount`;
-  return `${500 - points} points lagi untuk diskon ${formatIdr(50000)}`;
+  if (points >= 1000) return "Free planning fee tersedia";
+  if (points >= 500) return `Berhak atas diskon planning fee ${formatIdr(50000)}`;
+  return `${500 - points} poin lagi untuk diskon ${formatIdr(50000)}`;
 }
 
 export default async function ReferralPage() {
@@ -23,13 +23,13 @@ export default async function ReferralPage() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="p-5">
-        <CardTitle>Referral Program</CardTitle>
+        <CardTitle>Program Referral</CardTitle>
         <CardText className="mt-2">Dapatkan 25 poin untuk setiap referral signup yang valid.</CardText>
         <div className="mt-3 rounded-lg bg-[var(--bg-alt)] p-3 text-sm">Kode referral kamu: {referralCode}</div>
       </Card>
 
       <Card className="p-5">
-        <CardTitle>Redeem Rules</CardTitle>
+        <CardTitle>Aturan Penukaran</CardTitle>
         <ul className="mt-2 list-disc pl-5 text-sm text-[var(--text-soft)]">
           <li>500 poin = diskon IDR 50.000</li>
           <li>1000 poin = free planning fee</li>

@@ -31,26 +31,26 @@ export function Culture() {
           
           <div className="flex-1 order-1 lg:order-2">
             <div className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-sm text-zinc-300 mb-8 font-medium backdrop-blur-sm">
-              Immersive Experiences
+              Pengalaman Imersif
             </div>
             
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif font-semibold text-white mb-6 leading-[1.1]">
-              AI-curated <br />
-              <span className="text-orange-500">local experiences</span>
+              <span className="text-orange-500">Pengalaman lokal</span> <br />
+              terkurasi oleh AI
             </h2>
             
             <p className="text-zinc-400 text-lg mb-10 leading-relaxed max-w-xl">
-              Go beyond the tourist trails. Our AI engine analyzes thousands of data points to curate experiences that connect you with local traditions, authentic cuisine, and hidden heritage sites that make Indonesia truly special.
+              Jelajahi lebih dari sekadar rute turis. Mesin AI kami menganalisis ribuan titik data untuk menyusun pengalaman yang menghubungkan Anda dengan tradisi lokal, kuliner autentik, dan warisan tersembunyi yang menjadikan Indonesia benar-benar istimewa.
             </p>
             
             <div className="grid grid-cols-2 gap-8 mb-10">
               <div>
                 <h4 className="text-3xl font-bold text-white mb-2">17k+</h4>
-                <p className="text-zinc-400">Islands to explore</p>
+                <p className="text-zinc-400">Pulau untuk dijelajahi</p>
               </div>
               <div>
                 <h4 className="text-3xl font-bold text-white mb-2">300+</h4>
-                <p className="text-zinc-400">Ethnic groups</p>
+                <p className="text-zinc-400">Kelompok etnis</p>
               </div>
             </div>
             
@@ -58,7 +58,7 @@ export function Culture() {
               href="/activities"
               className="inline-flex items-center justify-center gap-2 h-14 px-8 bg-white text-zinc-900 rounded-full font-semibold transition-all hover:bg-zinc-100 hover:scale-[1.02]"
             >
-              Discover activities
+              Temukan aktivitas
               <ArrowRight className="w-5 h-5" />
             </Link>
           </div>

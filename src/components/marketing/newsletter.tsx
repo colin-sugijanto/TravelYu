@@ -1,3 +1,5 @@
+"use client";
+
 import { Send } from "lucide-react";
 
 export function Newsletter() {
@@ -11,16 +13,16 @@ export function Newsletter() {
 
           <div className="relative z-10 max-w-2xl mx-auto">
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-semibold text-zinc-900 mb-6">
-              Get travel inspiration delivered to your inbox
+              Dapatkan inspirasi perjalanan di kotak masuk Anda
             </h2>
             <p className="text-zinc-600 text-lg mb-10">
-              Join thousands of travelers. Get weekly tips, exclusive deals, and curated itineraries directly from our travel experts.
+              Bergabunglah dengan ribuan wisatawan. Dapatkan tips mingguan, penawaran eksklusif, dan rencana perjalanan dari ahli kami.
             </p>
 
-            <form className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
+            <form className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto" onSubmit={(e) => { e.preventDefault(); alert("Terima kasih telah berlangganan!"); }}>
               <input 
                 type="email" 
-                placeholder="Enter your email address" 
+                placeholder="Masukkan alamat email Anda" 
                 className="flex-1 h-14 px-6 rounded-full bg-white border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all shadow-sm"
                 required
               />
@@ -28,12 +30,12 @@ export function Newsletter() {
                 type="submit"
                 className="h-14 px-8 bg-zinc-900 text-white rounded-full font-semibold transition-all hover:bg-zinc-800 flex items-center justify-center gap-2 sm:w-auto shadow-lg shadow-zinc-900/10"
               >
-                Subscribe
+                Berlangganan
                 <Send className="w-4 h-4" />
               </button>
             </form>
             <p className="text-xs text-zinc-500 mt-4">
-              By subscribing you agree to our Terms & Conditions and Privacy Policy.
+              Dengan berlangganan, Anda menyetujui Syarat & Ketentuan serta Kebijakan Privasi kami.
             </p>
           </div>
         </div>

@@ -61,6 +61,16 @@ interface IntakeChatProps {
   mode: "standard" | "surprise";
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  who: "Siapa",
+  vibe: "Suasana",
+  when: "Kapan",
+  where: "Tujuan",
+  budget: "Anggaran",
+  pacing: "Ritme",
+  specialNeeds: "Kebutuhan Khusus",
+};
+
 export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   const router = useRouter();
   const [input, setInput] = useState("");
@@ -230,7 +240,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       </Card>
 
       <Card className="p-5">
-        <CardTitle>Parameter Progress</CardTitle>
+        <CardTitle>Progres Parameter</CardTitle>
         <p className="mt-2 text-sm text-[var(--text-soft)]">
           {completed} / {INTAKE_FIELDS.length} parameter terkumpul
         </p>
@@ -240,8 +250,8 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
             const done = flattenedText.toLowerCase().includes(field.toLowerCase());
             return (
               <div key={field} className="flex items-center justify-between rounded-lg bg-[var(--bg-alt)] px-3 py-2">
-                <span className="capitalize">{field}</span>
-                <span className={done ? "text-[var(--brand-strong)]" : "text-[var(--text-soft)]"}>{done ? "Done" : "Pending"}</span>
+                <span className="capitalize">{FIELD_LABELS[field] ?? field}</span>
+                <span className={done ? "text-[var(--brand-strong)]" : "text-[var(--text-soft)]"}>{done ? "Selesai" : "Menunggu"}</span>
               </div>
             );
           })}

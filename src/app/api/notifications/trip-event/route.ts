@@ -8,11 +8,14 @@ const allowedEvents = new Set([
 
 export async function POST(request: Request) {
   const expected = process.env.TRAVELYU_INTERNAL_API_TOKEN;
-  if (expected) {
-    const token = request.headers.get("x-travelyu-token");
-    if (!token || token !== expected) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!expected) {
+    console.error("TRAVELYU_INTERNAL_API_TOKEN is not configured");
+    return Response.json({ error: "Server configuration error" }, { status: 500 });
+  }
+
+  const token = request.headers.get("x-travelyu-token");
+  if (!token || token !== expected) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = (await request.json()) as {

@@ -48,17 +48,17 @@ export function Footer() {
           
           {/* Brand Col */}
           <div className="lg:col-span-4">
-            <Link href="/" className="inline-block mb-6 bg-white p-2 rounded-xl">
+            <div className="inline-block mb-6 bg-white p-2 rounded-xl">
               <Image 
                 src="/logo.png" 
                 alt="Travel Yu Logo" 
-                width={140} 
-                height={40} 
-                className="object-contain h-8 w-auto mix-blend-multiply"
+                width={180} 
+                height={50} 
+                className="object-contain h-12 md:h-14 lg:h-16 w-auto mix-blend-multiply"
               />
-            </Link>
+            </div>
             <p className="text-zinc-400 leading-relaxed mb-8 max-w-sm">
-              Your intelligent companion for discovering, planning, and experiencing the incredible beauty of Indonesia.
+              Pendamping cerdas Anda untuk menemukan, merencanakan, dan menikmati keindahan luar biasa Indonesia.
             </p>
             <div className="flex gap-4">
               <a href="#" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:bg-orange-500 hover:text-white transition-colors">
@@ -78,42 +78,42 @@ export function Footer() {
 
           {/* Links Cols */}
           <div className="lg:col-span-2 lg:col-start-6">
-            <h4 className="text-white font-semibold mb-6">Company</h4>
+            <h4 className="text-white font-semibold mb-6">Perusahaan</h4>
             <ul className="space-y-4">
-              <li><Link href="/about" className="text-zinc-400 hover:text-white transition-colors">About Us</Link></li>
-              <li><Link href="/careers" className="text-zinc-400 hover:text-white transition-colors">Careers</Link></li>
-              <li><Link href="/blog" className="text-zinc-400 hover:text-white transition-colors">Travel Blog</Link></li>
-              <li><Link href="/press" className="text-zinc-400 hover:text-white transition-colors">Press</Link></li>
+              <li><span className="text-zinc-400">Tentang Kami</span></li>
+              <li><span className="text-zinc-400">Karir</span></li>
+              <li><span className="text-zinc-400">Blog Perjalanan</span></li>
+              <li><span className="text-zinc-400">Pers</span></li>
             </ul>
           </div>
 
           <div className="lg:col-span-2">
-            <h4 className="text-white font-semibold mb-6">Destinations</h4>
+            <h4 className="text-white font-semibold mb-6">Destinasi</h4>
             <ul className="space-y-4">
-              <li><Link href="/destinations/bali" className="text-zinc-400 hover:text-white transition-colors">Bali</Link></li>
-              <li><Link href="/destinations/lombok" className="text-zinc-400 hover:text-white transition-colors">Lombok</Link></li>
-              <li><Link href="/destinations/java" className="text-zinc-400 hover:text-white transition-colors">Java</Link></li>
-              <li><Link href="/destinations/komodo" className="text-zinc-400 hover:text-white transition-colors">Komodo</Link></li>
+              <li><span className="text-zinc-400">Bali</span></li>
+              <li><span className="text-zinc-400">Lombok</span></li>
+              <li><span className="text-zinc-400">Jawa</span></li>
+              <li><span className="text-zinc-400">Komodo</span></li>
             </ul>
           </div>
 
           <div className="lg:col-span-3 lg:col-start-10">
-            <h4 className="text-white font-semibold mb-6">Support</h4>
+            <h4 className="text-white font-semibold mb-6">Dukungan</h4>
             <ul className="space-y-4">
-              <li><Link href="/help" className="text-zinc-400 hover:text-white transition-colors">Help Center</Link></li>
-              <li><Link href="/contact" className="text-zinc-400 hover:text-white transition-colors">Contact Us</Link></li>
-              <li><Link href="/privacy" className="text-zinc-400 hover:text-white transition-colors">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="text-zinc-400 hover:text-white transition-colors">Terms of Service</Link></li>
+              <li><span className="text-zinc-400">Pusat Bantuan</span></li>
+              <li><span className="text-zinc-400">Hubungi Kami</span></li>
+              <li><span className="text-zinc-400">Kebijakan Privasi</span></li>
+              <li><span className="text-zinc-400">Syarat Ketentuan</span></li>
             </ul>
           </div>
         </div>
 
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-zinc-500 text-sm">
-          <p>© <CurrentYear /> TravelYu. All rights reserved.</p>
+          <p>© <CurrentYear /> TravelYu. Semua hak dilindungi.</p>
           <div className="flex items-center gap-2">
-            <span>Made with</span>
+            <span>Dibuat dengan</span>
             <svg className="w-4 h-4 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-            <span>in Indonesia</span>
+            <span>di Indonesia</span>
           </div>
         </div>
       </div>

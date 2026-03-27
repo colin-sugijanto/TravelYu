@@ -5,6 +5,7 @@ const nextConfig = {
   cacheComponents: true,
   turbopack: {},
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",

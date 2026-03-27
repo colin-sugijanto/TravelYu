@@ -13,42 +13,42 @@ const DESTINATIONS = [
   {
     id: "bali",
     name: "Bali",
-    description: "The Island of Gods, known for its forested volcanic mountains, iconic rice paddies, beaches and coral reefs.",
+    description: "Pulau Dewata, termahsyur akan keindahan pegunungan berhutan, teras hijau ikonik, pantai, dan terumbu karang.",
     image: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?q=80&w=1200&auto=format&fit=crop",
     popular: true,
   },
   {
     id: "komodo",
-    name: "Komodo Island",
-    description: "Home to the famous Komodo dragons, pink sand beaches, and rugged hillsides.",
-    image: "https://images.unsplash.com/photo-1553621042-f6e147245754?q=80&w=800&auto=format&fit=crop",
+    name: "Pulau Komodo",
+    description: "Rumah bagi naga komodo yang ikonik, pantai berpasir merah muda, dan perbukitan terjal yang indah.",
+    image: "https://plus.unsplash.com/premium_photo-1668883189361-9c754861dbd6?q=80&w=774&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
     popular: true,
   },
   {
     id: "lombok",
     name: "Lombok",
-    description: "Unspoiled beaches, the majestic Mount Rinjani, and a laid-back vibe.",
-    image: "https://images.unsplash.com/photo-1576675466969-38eeae4ba2aa?q=80&w=800&auto=format&fit=crop",
+    description: "Pantai yang asri, Gunung Rinjani yang megah, dan suasana yang santai.",
+    image: "https://plus.unsplash.com/premium_photo-1721311166723-5c408da54364?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
     popular: false,
   },
   {
     id: "yogyakarta",
     name: "Yogyakarta",
-    description: "The cultural heart of Java, famous for traditional arts, Borobudur, and Prambanan temples.",
-    image: "https://images.unsplash.com/photo-1584814515159-86c6d2d46e22?q=80&w=800&auto=format&fit=crop",
+    description: "Jantung budaya Jawa, terkenal akan seni tradisional, Candi Borobudur, dan Prambanan.",
+    image: "https://images.unsplash.com/photo-1596402184320-417e7178b2cd?q=80&w=800&auto=format&fit=crop",
     popular: true,
   },
   {
     id: "raja-ampat",
     name: "Raja Ampat",
-    description: "An archipelago comprising over 1,500 small islands, cays, and shoals surrounding four main islands.",
-    image: "https://images.unsplash.com/photo-1516690553959-71a414d6b9b6?q=80&w=800&auto=format&fit=crop",
+    description: "Surga dunia yang memiliki lebih dari 1.500 pulau kecil mempesona di sekitar empat pulau utamanya.",
+    image: "https://images.unsplash.com/photo-1703769605297-cc74106244d9?q=80&w=884&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
     popular: false,
   },
   {
     id: "nusa-penida",
     name: "Nusa Penida",
-    description: "Stunning coastal cliffs, crystal clear waters, and spectacular viewpoints just a boat ride from Bali.",
+    description: "Tebing menawan, air laut yang sangat jernih, dan pemandangan luar biasa indah dekat dari Bali.",
     image: "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?q=80&w=800&auto=format&fit=crop",
     popular: true,
   }
@@ -62,19 +62,18 @@ export default function DestinationsPage() {
           
           <div className="max-w-3xl mb-12 lg:mb-20 text-center mx-auto">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-semibold text-zinc-900 tracking-tight mb-6">
-              Places to <span className="text-orange-500">Go</span>
+              Tempat untuk <span className="text-orange-500">Dikunjungi</span>
             </h1>
             <p className="text-lg text-zinc-600 leading-relaxed">
-              From the lush jungles of Bali to the prehistoric landscapes of Komodo, discover the perfect destination for your next unforgettable journey.
+              Dari hutan rimbun Bali hingga lanskap prasejarah Komodo, temukan destinasi sempurna untuk perjalanan tak terlupakan Anda berikutnya.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 mb-24">
             {DESTINATIONS.map((dest) => (
-              <Link 
-                href={`/destinations/${dest.id}`} 
+              <div 
                 key={dest.id}
-                className="group flex flex-col rounded-3xl overflow-hidden bg-white shadow-sm border border-zinc-100 hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                className="group flex flex-col rounded-3xl overflow-hidden bg-white shadow-sm border border-zinc-100 transition-all duration-300"
               >
                 <div className="relative h-64 sm:h-72 w-full overflow-hidden">
                   <Image 
@@ -86,7 +85,7 @@ export default function DestinationsPage() {
                   />
                   {dest.popular && (
                     <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-semibold text-orange-600 shadow-sm">
-                      Popular
+                      Populer
                     </div>
                   )}
                 </div>
@@ -97,13 +96,8 @@ export default function DestinationsPage() {
                   </div>
                   <h3 className="text-2xl font-serif font-semibold text-zinc-900 mb-3">{dest.name}</h3>
                   <p className="text-zinc-600 text-sm leading-relaxed mb-6 flex-1">{dest.description}</p>
-                  
-                  <div className="mt-auto flex items-center text-orange-500 font-medium text-sm group-hover:gap-2 transition-all">
-                    Explore Destination
-                    <ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />
-                  </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
           

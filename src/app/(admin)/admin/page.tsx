@@ -16,10 +16,10 @@ export default async function AdminHomePage() {
   const [metrics, flaggedItems] = await Promise.all([getAdminMetrics(appUser.id), getFlaggedQueue(8)]);
 
   const cards = [
-    { title: "Trip Queue (30d)", value: `${metrics.tripVolume30d} trips`, href: "/admin/trips" },
-    { title: "Flagged Items", value: `${metrics.flaggedPending} pending`, href: "/admin/flagged" },
-    { title: "Live Chat", value: `${metrics.openChats} open`, href: "/admin/chat" },
-    { title: "Revenue", value: formatIdr(metrics.revenuePlanningFeeIdr), href: "/admin/analytics" },
+    { title: "Antrian Trip (30h)", value: `${metrics.tripVolume30d} trip`, href: "/admin/trips" },
+    { title: "Item Ditandai", value: `${metrics.flaggedPending} menunggu`, href: "/admin/flagged" },
+    { title: "Live Chat", value: `${metrics.openChats} aktif`, href: "/admin/chat" },
+    { title: "Pendapatan", value: formatIdr(metrics.revenuePlanningFeeIdr), href: "/admin/analytics" },
   ];
 
   return (
@@ -36,7 +36,7 @@ export default async function AdminHomePage() {
       </section>
 
       <Card className="p-5">
-        <CardTitle>CS Priorities</CardTitle>
+        <CardTitle>Prioritas CS</CardTitle>
         <div className="mt-3">
           <AdminFlagQueue items={flaggedItems} compact />
         </div>

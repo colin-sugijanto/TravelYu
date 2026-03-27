@@ -32,3 +32,22 @@ export function slugify(input: string) {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 }
+
+/**
+ * Builds a human-readable trip label from intake data.
+ * Format: "Lokasi · Tanggal" or just "Lokasi" or falls back to public_id.
+ */
+export function formatTripName(trip: {
+  public_id: string;
+  intake_data?: {
+    where?: string;
+    when?: string;
+  } | null;
+}): string {
+  const where = trip.intake_data?.where?.trim();
+  const when = trip.intake_data?.when?.trim();
+
+  if (where && when) return `${where} · ${when}`;
+  if (where) return where;
+  return trip.public_id;
+}

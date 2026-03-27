@@ -1,4 +1,11 @@
+import { getCurrentAppUser } from "@/lib/auth";
+
 export async function GET(_: Request, { params }: { params: Promise<{ city: string }> }) {
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { city } = await params;
   const apiKey = process.env.OPENWEATHERMAP_API_KEY;
 

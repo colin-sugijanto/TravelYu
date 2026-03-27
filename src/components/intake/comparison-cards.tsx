@@ -51,22 +51,37 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
     setErrorMessage(null);
 
     try {
-      const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/generate`, {
+      // First, mark the option as selected so the server knows which one to use
+      const selectResp = await fetch(`/api/trip/${encodeURIComponent(tripId)}/select-option`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ optionNumber: selectedOption }),
+      });
+      if (!selectResp.ok) {
+        const payload = (await selectResp.json().catch(() => null)) as { error?: string } | null;
+        setErrorMessage(payload?.error ?? "Gagal menyimpan opsi terpilih.");
+        return;
+      }
+
+      // The endpoint immediately returns 202 Accepted after setting the DB state to "generating"
+      // while the actual AI generation runs in the background. We await it here so we don't
+      // redirect before the DB state is updated.
+      const generateResp = await fetch(`/api/trip/${encodeURIComponent(tripId)}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ selectedOption }),
       });
 
-      const payload = await response.json();
-      if (!response.ok) {
-        setErrorMessage(payload.error ?? "Gagal generate itinerary.");
+      if (!generateResp.ok) {
+        setErrorMessage("Gagal memproses generation.");
+        setIsGenerating(false);
         return;
       }
 
+      // Redirect immediately; the trip page shows a "Sedang Diproses" banner + auto-polls
       router.push(`/trip/${encodeURIComponent(tripId)}`);
     } catch {
       setErrorMessage("Gagal generate itinerary.");
-    } finally {
       setIsGenerating(false);
     }
   };

@@ -5,7 +5,7 @@ export function HiddenGems() {
     {
       title: "Pink Beach",
       location: "Komodo National Park",
-      image: "https://images.unsplash.com/photo-1552554744-8848db9d6d37?q=80&w=800&auto=format&fit=crop"
+      image: "https://images.unsplash.com/photo-1700591698351-f8131b0f5d3c?q=80&w=436&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
     {
       title: "Mount Bromo",
@@ -15,12 +15,12 @@ export function HiddenGems() {
     {
       title: "Tiu Kelep Waterfall",
       location: "Lombok",
-      image: "https://images.unsplash.com/photo-1576405368307-e85dfba068ba?q=80&w=800&auto=format&fit=crop"
+      image: "https://plus.unsplash.com/premium_photo-1674014497100-a2751be936aa?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     },
     {
       title: "Banda Islands",
       location: "West Papua",
-      image: "https://images.unsplash.com/photo-1544498322-8356bb711e50?q=80&w=800&auto=format&fit=crop"
+      image: "https://images.unsplash.com/photo-1516690553959-71a414d6b9b6?q=80&w=800&auto=format&fit=crop"
     }
   ];
 
@@ -29,10 +29,10 @@ export function HiddenGems() {
       <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-8 xl:px-12">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-semibold text-zinc-900 mb-6">
-            Discover hidden gems
+            Temukan permata tersembunyi
           </h2>
           <p className="text-zinc-600 text-lg">
-            Escape the crowds and find untouched beauty recommended by our intelligent travel engine.
+            Hindari keramaian dan temukan keindahan alam yang tak tersentuh, direkomendasikan oleh mesin perjalanan cerdas kami.
           </p>
         </div>
 

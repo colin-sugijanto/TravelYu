@@ -59,7 +59,7 @@ function buildDisplayName(user: {
 
   if (joinedName) return joinedName;
   if (user.username?.trim()) return user.username.trim();
-  return "Traveler";
+  return null;
 }
 
 function getClaimString(claims: SessionClaimsMap, key: string): string | null {
@@ -79,7 +79,7 @@ function buildProfileFromClaims(clerkId: string, claims: SessionClaimsMap) {
     fullName: getClaimString(claims, "full_name"),
     firstName: getClaimString(claims, "given_name") ?? getClaimString(claims, "first_name"),
     lastName: getClaimString(claims, "family_name") ?? getClaimString(claims, "last_name"),
-    username: getClaimString(claims, "preferred_username") ?? getClaimString(claims, "username") ?? clerkId,
+    username: getClaimString(claims, "preferred_username") ?? getClaimString(claims, "username"),
   });
 
   return {
@@ -163,7 +163,7 @@ async function createPublicUser(clerkId: string, fullName: string, email: string
     .from("users")
     .insert({
       clerk_id: clerkId,
-      full_name: fullName,
+      full_name: fullName || null,
       email: normalizedEmail,
     })
     .select("id,full_name,email,role,clerk_id")
@@ -200,11 +200,11 @@ export const getCurrentAppUser = cache(async (): Promise<AppUserContext | null> 
   let appUser = await findUserByClerkId(clerkId);
 
   if (!appUser && email) {
-    appUser = await claimUserByEmail(clerkId, fullName, email);
+    appUser = await claimUserByEmail(clerkId, fullName ?? "", email);
   }
 
   if (!appUser) {
-    appUser = await createPublicUser(clerkId, fullName, email);
+    appUser = await createPublicUser(clerkId, fullName ?? "", email);
   }
 
   if (!appUser) return null;

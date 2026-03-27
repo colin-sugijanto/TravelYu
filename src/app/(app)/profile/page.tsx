@@ -49,28 +49,28 @@ export default async function ProfilePage() {
 
   return (
     <Card className="max-w-3xl p-5">
-      <CardTitle>My Profile</CardTitle>
+      <CardTitle>Profil Saya</CardTitle>
       <CardText className="mt-1">Kelola data onboarding: nama, WA, dan preferensi perjalanan.</CardText>
 
       <form action={updateProfile} className="mt-4 space-y-3">
-        <label className="block text-sm font-medium">Full Name</label>
+        <label className="block text-sm font-medium">Nama Lengkap</label>
         <input name="fullName" defaultValue={profile.full_name ?? ""} className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
 
-        <label className="block text-sm font-medium">WhatsApp Number</label>
+        <label className="block text-sm font-medium">Nomor WhatsApp</label>
         <input name="whatsappNumber" defaultValue={profile.whatsapp_number ?? ""} className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
 
-        <label className="block text-sm font-medium">Preferred Vibes (comma separated)</label>
-        <input name="vibe" defaultValue={initialVibe} placeholder="culture, adventure, culinary" className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
+        <label className="block text-sm font-medium">Preferensi Vibe (pisahkan dengan koma)</label>
+        <input name="vibe" defaultValue={initialVibe} placeholder="budaya, petualangan, kuliner" className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
 
-        <label className="block text-sm font-medium">Budget Tier</label>
-        <input name="budgetTier" defaultValue={initialBudgetTier} placeholder="budget / mid / premium" className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
+        <label className="block text-sm font-medium">Tingkat Anggaran</label>
+        <input name="budgetTier" defaultValue={initialBudgetTier} placeholder="hemat / menengah / premium" className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
 
         <div className="rounded-lg bg-[var(--bg-alt)] px-3 py-2 text-sm">
-          Role: <span className="font-semibold">{profile.role}</span> · Points: <span className="font-semibold">{profile.points_balance}</span>
+          Peran: <span className="font-semibold">{profile.role}</span> · Poin: <span className="font-semibold">{profile.points_balance}</span>
         </div>
 
         <button type="submit" className="rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white">
-          Save Profile
+          Simpan Profil
         </button>
       </form>
     </Card>
