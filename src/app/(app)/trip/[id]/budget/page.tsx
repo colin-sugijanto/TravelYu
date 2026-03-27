@@ -1,8 +1,9 @@
 import { BudgetTracker } from "@/components/itinerary/budget-tracker";
-import { getItineraryItems } from "@/lib/data";
+import { getItineraryItems, getTripById } from "@/lib/data";
 
 export default async function TripBudgetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const trip = await getTripById(id);
   const items = await getItineraryItems(id);
-  return <BudgetTracker totalBudgetIdr={15000000} items={items} />;
+  return <BudgetTracker totalBudgetIdr={trip?.total_est_cost_idr ?? 15000000} items={items} />;
 }

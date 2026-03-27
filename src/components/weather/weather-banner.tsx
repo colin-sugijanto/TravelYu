@@ -21,7 +21,7 @@ export function WeatherBanner({ city, condition, advice }: WeatherBannerProps) {
     >
       <Icon className="h-5 w-5 shrink-0" />
       <div>
-        <p className="text-sm font-semibold">Forecast Alert · {city}</p>
+        <p className="text-sm font-semibold">Forecast Alert - {city}</p>
         <CardText>{advice}</CardText>
       </div>
     </div>

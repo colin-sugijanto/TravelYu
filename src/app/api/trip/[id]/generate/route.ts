@@ -1,4 +1,5 @@
 import { revalidateTag } from "next/cache";
+import { after } from "next/server";
 
 import { getCurrentAppUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -45,15 +46,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // Revalidate the trip tag so the client can see the status change
   revalidateTag(`trip:${trip.id}`, "max");
 
-  // Run the actual AI generation in the background without awaiting it
-  (async () => {
+  after(async () => {
     try {
       const response = await fetch(new URL("/api/ai/generate-trip", request.url), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Pass cookie if needed for internal API authentication, though for background tasks
-          // it might be more robust to use an admin key or rely on tripId for authorization within the AI endpoint.
           ...(request.headers.get("cookie") ? { cookie: request.headers.get("cookie") as string } : {}),
         },
         body: JSON.stringify({
@@ -63,29 +61,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }),
       });
 
-      const payload = await response.json();
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
 
       if (!response.ok) {
         console.error(`Background AI generation failed for trip ${trip.id}:`, payload);
-        // If AI generation fails, update trip status to 'intake'
-        await supabaseAdmin.from("trips").update({ status: "intake" }).eq("id", trip.id);
-      } else {
-        console.log(`Background AI generation successful for trip ${trip.id}`);
-        // The /api/ai/generate-trip endpoint is expected to update the trip with the generated itinerary
-        // and set its status to 'completed' or similar upon success.
+        await supabaseAdmin
+          .from("trips")
+          .update({ status: "intake", updated_at: new Date().toISOString() })
+          .eq("id", trip.id);
       }
     } catch (error) {
       console.error(`Error during background AI generation for trip ${trip.id}:`, error);
-      // Update trip status to 'intake' on unexpected errors during the background process
-      await supabaseAdmin.from("trips").update({ status: "intake" }).eq("id", trip.id);
+      await supabaseAdmin
+        .from("trips")
+        .update({ status: "intake", updated_at: new Date().toISOString() })
+        .eq("id", trip.id);
     } finally {
-      // Revalidate tags again to reflect the final state (success/failure) and any new data
       revalidateTag(`trip:${trip.id}`, "max");
       revalidateTag(`trip:${trip.id}:items`, "max");
       revalidateTag("admin:metrics", "max");
     }
-  })(); // Immediately invoke the async function
+  });
 
-  // Immediately return 202 Accepted to the client
   return Response.json({ ok: true, status: "generating" }, { status: 202 });
 }

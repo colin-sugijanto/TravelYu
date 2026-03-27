@@ -25,6 +25,9 @@ export default async function DashboardPage() {
   const STATUS_LABELS: Record<string, string> = {
     intake: "Perencanaan",
     compare: "Pilih Opsi",
+    generating: "Sedang Diproses",
+    draft: "Draft",
+    approved: "Disetujui",
     confirmed: "Dikonfirmasi",
     active: "Aktif",
     completed: "Selesai",

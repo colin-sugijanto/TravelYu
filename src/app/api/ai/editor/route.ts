@@ -5,6 +5,7 @@ import { toModelMessages } from "@/lib/ai/messages";
 import { itineraryTools } from "@/lib/ai/tools";
 import { model } from "@/lib/ai/openrouter";
 import { checkAiRateLimit } from "@/lib/rate-limit";
+import { getItineraryItems } from "@/lib/data";
 
 const EDITOR_SYSTEM_PROMPT = `
 Kamu adalah editor itinerary TravelYu.
@@ -35,12 +36,32 @@ export async function POST(request: Request) {
     userId?: string;
   };
 
+  const itineraryItems = await getItineraryItems(tripId);
+  const itineraryContext = itineraryItems
+    .slice(0, 60)
+    .map((item) => {
+      const parts = [
+        `day=${item.day_number}`,
+        `slot=${item.time_slot}`,
+        `type=${item.activity_type}`,
+        `title=${item.title}`,
+      ];
+      if (item.location_address) {
+        parts.push(`location=${item.location_address}`);
+      }
+      if (typeof item.est_cost_idr === "number") {
+        parts.push(`cost=${item.est_cost_idr}`);
+      }
+      return parts.join(" | ");
+    })
+    .join("\n");
+
   const modelMessages = await toModelMessages(messages);
 
   const result = streamText({
     model,
     maxRetries: 2,
-    system: `${EDITOR_SYSTEM_PROMPT}\nTrip ID aktif: ${tripId}\nUser ID aktif: ${userId ?? "unknown"}`,
+    system: `${EDITOR_SYSTEM_PROMPT}\nTrip ID aktif: ${tripId}\nUser ID aktif: ${userId ?? "unknown"}\n\nCurrent itinerary items:\n${itineraryContext || "(no itinerary items found)"}`,
     messages: modelMessages,
     tools: {
       update_itinerary_item: tool(itineraryTools.update_itinerary_item),

@@ -74,7 +74,8 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
       });
 
       if (!generateResp.ok) {
-        setErrorMessage("Gagal memproses generation.");
+        const payload = (await generateResp.json().catch(() => null)) as { error?: string } | null;
+        setErrorMessage(payload?.error ?? "Gagal memproses generation.");
         setIsGenerating(false);
         return;
       }

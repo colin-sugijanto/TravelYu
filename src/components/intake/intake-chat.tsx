@@ -11,6 +11,58 @@ import { DefaultChatTransport } from "ai";
 
 const INTAKE_COMPLETE_TOKEN = "[INTAKE_COMPLETE]";
 
+const FIELD_PATTERNS: Record<string, RegExp[]> = {
+  who: [
+    /\b(saya|kami|aku|pasangan|suami|istri|keluarga|teman|rombongan|solo|sendiri|anak)\b/i,
+    /\b\d+\s*orang\b/i,
+  ],
+  vibe: [
+    /\b(vibe|suasana|mood|nuansa|gaya\s*trip)\b/i,
+    /\b(santai|romantis|petualangan|adventure|culinary|kuliner|budaya|healing|relax)\b/i,
+  ],
+  when: [
+    /\b(kapan|tanggal|tgl|hari|malam|minggu|bulan|juni|juli|agustus|september|oktober|november|desember|januari|februari|maret|april|mei)\b/i,
+    /\b\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?\b/i,
+  ],
+  where: [
+    /\b(where|tujuan|destinasi|ke\s+[a-z])\b/i,
+    /\b(bali|lombok|yogyakarta|jogja|jakarta|bandung|surabaya|nusa penida|komodo|raja ampat|labuan bajo)\b/i,
+  ],
+  budget: [
+    /\b(budget|anggaran|biaya|rp\s?\d|juta|ribu)\b/i,
+  ],
+  pacing: [
+    /\b(pacing|ritme|tempo|pelan|santai|padat|2-3 aktivitas|itinerary)\b/i,
+  ],
+  specialNeeds: [
+    /\b(special\s*needs?|kebutuhan\s*khusus|preferensi\s*khusus|aksesibilitas|disabilitas)\b/i,
+    /\b(halal|lift|kursi\s*roda|alergi|vegetarian|vegan|ramah\s*anak)\b/i,
+  ],
+};
+
+function hasAssistantCompletionSignal(messageTexts: Array<{ role: "assistant" | "user"; text: string }>) {
+  return messageTexts.some((message) => {
+    if (message.role !== "assistant") return false;
+
+    const text = message.text;
+    if (text.includes(INTAKE_COMPLETE_TOKEN)) return true;
+
+    const normalized = stripControlTokens(text).toLowerCase();
+    return (
+      /intake\s+selesai/.test(normalized) ||
+      /semua\s+parameter\s+sudah\s+lengkap/.test(normalized) ||
+      /lanjut(kan)?\s+ke\s+opsi\s+(trip\s+)?(comparison|perbandingan)/.test(normalized) ||
+      /opsi\s+(trip\s+)?(comparison|perbandingan)/.test(normalized) ||
+      /bersiap\s+untuk\s+memberikan\s+opsi/.test(normalized)
+    );
+  });
+}
+
+function isFieldCompleted(field: string, content: string) {
+  const patterns = FIELD_PATTERNS[field] ?? [];
+  return patterns.some((pattern) => pattern.test(content));
+}
+
 function extractTextFromParts(parts: Array<{ type: string; text?: string }>) {
   return parts
     .filter((part) => part.type === "text")
@@ -107,22 +159,26 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     [normalizedMessages],
   );
 
-  const isIntakeCompleted = useMemo(
-    () =>
-      messageTexts.some(
-        (message) => message.role === "assistant" && message.text.includes(INTAKE_COMPLETE_TOKEN),
-      ),
-    [messageTexts],
-  );
+  const isIntakeCompleted = useMemo(() => hasAssistantCompletionSignal(messageTexts), [messageTexts]);
 
   const flattenedText = useMemo(
     () => messageTexts.map((message) => stripControlTokens(message.text)).join("\n"),
     [messageTexts],
   );
 
+  const intakeSummaryForCompare = useMemo(() => {
+    const userOnly = messageTexts
+      .filter((message) => message.role === "user")
+      .map((message) => stripControlTokens(message.text).trim())
+      .filter(Boolean)
+      .join("\n");
+
+    const source = userOnly.length > 0 ? userOnly : flattenedText;
+    return source.slice(0, 5000);
+  }, [flattenedText, messageTexts]);
+
   const completed = useMemo(() => {
-    const content = flattenedText.toLowerCase();
-    return INTAKE_FIELDS.filter((field) => content.includes(field.toLowerCase())).length;
+    return INTAKE_FIELDS.filter((field) => isFieldCompleted(field, flattenedText)).length;
   }, [flattenedText]);
 
   const progress = Math.round((completed / INTAKE_FIELDS.length) * 100);
@@ -136,7 +192,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   };
 
   const generateOptions = useCallback(async () => {
-    if (isGeneratingOptions || !flattenedText.trim()) return;
+    if (isGeneratingOptions || !intakeSummaryForCompare.trim()) return;
 
     setIsGeneratingOptions(true);
     setCompareError(null);
@@ -147,7 +203,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tripId,
-          intakeSummary: flattenedText,
+          intakeSummary: intakeSummaryForCompare,
         }),
       });
 
@@ -161,7 +217,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     } finally {
       setIsGeneratingOptions(false);
     }
-  }, [flattenedText, isGeneratingOptions, router, tripId]);
+  }, [intakeSummaryForCompare, isGeneratingOptions, router, tripId]);
 
   useEffect(() => {
     if (!isIntakeCompleted || autoAdvanceTriggeredRef.current) return;
@@ -247,7 +303,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
         <Progress className="mt-3" value={progress} />
         <div className="mt-4 space-y-2 text-sm">
           {INTAKE_FIELDS.map((field) => {
-            const done = flattenedText.toLowerCase().includes(field.toLowerCase());
+            const done = isFieldCompleted(field, flattenedText);
             return (
               <div key={field} className="flex items-center justify-between rounded-lg bg-[var(--bg-alt)] px-3 py-2">
                 <span className="capitalize">{FIELD_LABELS[field] ?? field}</span>

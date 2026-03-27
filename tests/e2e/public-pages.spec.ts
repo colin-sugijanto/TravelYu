@@ -27,6 +27,6 @@ test.describe("Login Page", () => {
   test("should show login page", async ({ page }) => {
     await page.goto("/login");
     
-    await expect(page.locator('text="Login"')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: /Login ke TravelYu/i })).toBeVisible({ timeout: 10000 });
   });
 });

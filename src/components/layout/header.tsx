@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
-import { Show, UserButton } from "@clerk/nextjs";
+import { ClerkLoaded, ClerkLoading, Show, UserButton } from "@clerk/nextjs";
 import { MobileMenu } from "./mobile-menu";
 
 export function AppHeader() {
@@ -38,20 +40,26 @@ export function AppHeader() {
 
         {/* Right side actions */}
         <div className="flex items-center gap-4 md:gap-6">
+          <ClerkLoading>
+            <div className="h-8 w-8" aria-hidden="true" />
+          </ClerkLoading>
 
-          <Show when="signed-out">
-            <Link
-              href="/login?next=%2Fdashboard"
-              className="text-sm font-medium text-zinc-800 transition-colors hover:text-zinc-900"
-            >
-              Masuk
-            </Link>
-          </Show>
-          <Show when="signed-in">
-            <div className="pl-2 md:pl-4 border-l border-zinc-200">
-              <UserButton />
-            </div>
-          </Show>
+          <ClerkLoaded>
+            <Show when="signed-out">
+              <Link
+                href="/login?next=%2Fdashboard"
+                className="text-sm font-medium text-zinc-800 transition-colors hover:text-zinc-900"
+              >
+                Masuk
+              </Link>
+            </Show>
+
+            <Show when="signed-in">
+              <div className="pl-2 md:pl-4 border-l border-zinc-200">
+                <UserButton />
+              </div>
+            </Show>
+          </ClerkLoaded>
         </div>
       </div>
     </header>

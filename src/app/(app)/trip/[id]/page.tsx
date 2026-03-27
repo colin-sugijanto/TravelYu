@@ -69,7 +69,7 @@ const STATUS_INFO: Record<string, { label: string; desc: string; color: string }
   },
   draft: {
     label: "Draft — Menunggu Persetujuan",
-    desc: "Itinerary sudah dibuat dan menunggu review dari tim TravelYu.",
+    desc: "Itinerary sudah dibuat. Jika mode development aktif, itinerary akan auto-approved.",
     color: "bg-purple-50 border-purple-200 text-purple-800",
   },
   approved: {
