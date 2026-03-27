@@ -7,6 +7,7 @@ import { model } from "@/lib/ai/openrouter";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { validateRequest, compareOptionsSchema } from "@/lib/validators";
 
 const compareTool = tool({
   description: "Persist generated trip comparison options",
@@ -68,14 +69,22 @@ export async function POST(request: Request) {
     return Response.json({ error: "AI compare options service is not configured" }, { status: 503 });
   }
 
-  const body = (await request.json()) as {
-    tripId: string;
-    intakeSummary: string;
-  };
-
-  if (!body.tripId || !body.intakeSummary?.trim()) {
-    return Response.json({ error: "tripId and intakeSummary are required" }, { status: 400 });
+  let body: { tripId: string; intakeSummary: string };
+  try {
+    const rawData = await request.json();
+    body = validateRequest(compareOptionsSchema, rawData);
+  } catch (error) {
+    if (error instanceof Error && error.name === "ValidationError") {
+      const validationError = error as unknown as { errors: Array<{ field: string; message: string }> };
+      return Response.json(
+        { error: "Invalid input", details: validationError.errors },
+        { status: 400 },
+      );
+    }
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
+
+  const sanitizedSummary = body.intakeSummary.slice(0, 5000);
 
   const { data: trip } = await supabaseAdmin
     .from("trips")
@@ -95,7 +104,7 @@ export async function POST(request: Request) {
     .update({
       intake_data: {
         ...((trip.intake_data as Record<string, unknown> | null) ?? {}),
-        summary: body.intakeSummary,
+        summary: sanitizedSummary,
       },
       updated_at: new Date().toISOString(),
     })
@@ -109,7 +118,7 @@ export async function POST(request: Request) {
 Generate 3 distinct itinerary comparison options.
 
 Trip ID: ${body.tripId}
-Intake Summary: ${body.intakeSummary}
+Intake Summary: ${sanitizedSummary}
 
 Call save_comparison_options with structured options.
 

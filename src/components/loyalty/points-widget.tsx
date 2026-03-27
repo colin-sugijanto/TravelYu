@@ -1,4 +1,4 @@
-import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Sparkles } from "lucide-react";
 

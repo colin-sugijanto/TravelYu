@@ -2,12 +2,12 @@ import { getCurrentAppUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { revalidateTag } from "next/cache";
 
-function sanitizeFileName(input: string) {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]/g, "-")
-    .replace(/-+/g, "-");
+function sanitizeFileName(input: string): string {
+  const ext = input.includes(".") ? input.split(".").pop()?.toLowerCase() : "jpg";
+  const safeExt = ext && ["jpg", "jpeg", "png", "gif", "webp"].includes(ext) ? ext : "jpg";
+  const timestamp = Date.now();
+  const random = crypto.randomUUID().split("-")[0];
+  return `${timestamp}-${random}.${safeExt}`;
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {

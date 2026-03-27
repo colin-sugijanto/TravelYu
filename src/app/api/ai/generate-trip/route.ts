@@ -9,6 +9,7 @@ import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { validateRequest, generateTripSchema } from "@/lib/validators";
 
 type ComparisonSummary = {
   title?: string;
@@ -90,14 +91,19 @@ export async function POST(request: Request) {
     return Response.json({ error: "AI itinerary generation service is not configured" }, { status: 503 });
   }
 
-  const body = (await request.json()) as {
-    tripId: string;
-    intakeData?: Record<string, unknown>;
-    selectedOption?: number;
-  };
-
-  if (!body.tripId) {
-    return Response.json({ error: "tripId is required" }, { status: 400 });
+  let body: { tripId: string; intakeData?: Record<string, unknown>; selectedOption?: number };
+  try {
+    const rawData = await request.json();
+    body = validateRequest(generateTripSchema, rawData);
+  } catch (error) {
+    if (error instanceof Error && error.name === "ValidationError") {
+      const validationError = error as unknown as { errors: Array<{ field: string; message: string }> };
+      return Response.json(
+        { error: "Invalid input", details: validationError.errors },
+        { status: 400 },
+      );
+    }
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { data: trip, error: tripError } = await supabaseAdmin
@@ -120,6 +126,19 @@ export async function POST(request: Request) {
     .eq("id", body.tripId);
 
   const intakeData = body.intakeData ?? ((trip.intake_data as Record<string, unknown> | null) ?? {});
+  
+  const sanitizeForPrompt = (obj: Record<string, unknown>): string => {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === "string") {
+        sanitized[key] = value.slice(0, 2000);
+      } else if (typeof value !== "function" && typeof value !== "symbol") {
+        sanitized[key] = value;
+      }
+    }
+    return JSON.stringify(sanitized).slice(0, 10000);
+  };
+  
   const comparisonOption = body.selectedOption ?? trip.selected_comparison_option;
 
   if (!comparisonOption || comparisonOption < 1 || comparisonOption > 3) {
@@ -167,24 +186,28 @@ export async function POST(request: Request) {
   };
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000);
+
     const result = await generateText({
       model,
       maxRetries: 2,
-      maxSteps: 5,
+      abortSignal: controller.signal,
       system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
       prompt: `
 You are TravelYu itinerary generation engine.
 
 Trip ID: ${body.tripId}
-Intake data: ${JSON.stringify(intakeData)}
+Intake data: ${sanitizeForPrompt(intakeData)}
 Selected comparison option: ${comparisonOption}
 Selected option details: ${JSON.stringify(selectedOptionContext)}
 
 Generate a 3-5 day itinerary with complete item fields.
 The generated itinerary MUST follow the selected option details (destinations, vibe, and budget direction).
-After generation, call save_itinerary tool with structured payload.
+IMPORTANT: You MUST call the save_itinerary tool with the complete itinerary data before finishing.
+Do not output the itinerary in text form - only call the save_itinerary tool.
 
-If you need fresh activity ideas, use search_indonesia_places tool.
+If you need fresh activity ideas, use search_indonesia_places tool first.
 `,
       tools: {
         save_itinerary: saveItineraryTool,
@@ -205,6 +228,8 @@ If you need fresh activity ideas, use search_indonesia_places tool.
       },
     });
 
+    clearTimeout(timeoutId);
+
     const recipient = await resolveTripRecipient(body.tripId);
     if (recipient) {
       scheduleNotification({
@@ -222,13 +247,23 @@ If you need fresh activity ideas, use search_indonesia_places tool.
       message: result.text,
     });
   } catch (error) {
+    console.error("[generate-trip] Error during generation:", error);
+
+    const isTimeout = error instanceof Error && error.name === "AbortError";
+    
     await supabaseAdmin
       .from("trips")
-      .update({ status: "intake", updated_at: new Date().toISOString() })
+      .update({ 
+        status: "intake", 
+        updated_at: new Date().toISOString(),
+        error_message: isTimeout ? "Generation timeout after 3 minutes" : String(error)
+      })
       .eq("id", body.tripId);
 
     const parsed = parseAiProviderError(error, {
-      defaultMessage: "AI itinerary gagal sementara. Coba generate ulang dalam beberapa saat.",
+      defaultMessage: isTimeout 
+        ? "AI itinerary timeout setelah 3 menit. Coba generate ulang." 
+        : "AI itinerary gagal sementara. Coba generate ulang dalam beberapa saat.",
       rateLimitedMessage: "Layanan AI sedang padat (rate-limited). Coba lagi 20-60 detik lagi.",
     });
 
@@ -242,7 +277,7 @@ If you need fresh activity ideas, use search_indonesia_places tool.
           ? {
               "Retry-After": String(parsed.retryAfterSeconds),
             }
-          : undefined,
+          : {},
       },
     );
   }

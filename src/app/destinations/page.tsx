@@ -1,8 +1,7 @@
 import { AppShell } from "@/components/layout/shell";
 import { Footer } from "@/components/layout/footer";
 import Image from "next/image";
-import Link from "next/link";
-import { MapPin, ArrowRight } from "lucide-react";
+import { MapPin } from "lucide-react";
 
 export const metadata = {
   title: "Destinations - TravelYu",

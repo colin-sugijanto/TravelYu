@@ -5,7 +5,7 @@ import { BudgetTracker } from "@/components/itinerary/budget-tracker";
 import { EditorChat } from "@/components/itinerary/editor-chat";
 import { ItineraryMap } from "@/components/itinerary/map";
 import { ItineraryTimeline } from "@/components/itinerary/timeline";
-import { Card, CardTitle, CardText } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { WeatherBanner } from "@/components/weather/weather-banner";
 import { getCurrentAppUser } from "@/lib/auth";
 import { getItineraryItems, getTripById } from "@/lib/data";
@@ -108,7 +108,6 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
 
   const tripName = formatTripName(trip);
   const isWorkspaceReady = trip.status === "approved" || trip.status === "active" || trip.status === "completed";
-  const isPendingStatus = !isWorkspaceReady && trip.status !== "draft";
   const statusInfo = STATUS_INFO[trip.status];
 
   // Destination for weather (extract first word of where field)

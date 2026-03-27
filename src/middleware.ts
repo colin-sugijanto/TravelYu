@@ -17,7 +17,8 @@ const isPublicRoute = createRouteMatcher([
   "/window.svg",
 ]);
 
-export default clerkMiddleware(async (auth, request) => {
+// Named export for Next.js 16+ compatibility (avoids deprecation warning)
+export const middleware = clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) {
     const pathname = request.nextUrl.pathname;
     const search = request.nextUrl.search;

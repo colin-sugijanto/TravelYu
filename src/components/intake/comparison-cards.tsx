@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
@@ -118,9 +119,18 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
               type="button"
               onClick={() => selectOption(option.option_number)}
               disabled={isSaving}
-              className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {selectedOption === option.option_number ? "Opsi Terpilih" : "Pilih Opsi Ini"}
+              {isSaving && selectedOption === option.option_number ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : selectedOption === option.option_number ? (
+                "Opsi Terpilih"
+              ) : (
+                "Pilih Opsi Ini"
+              )}
             </button>
           </Card>
         ))}
@@ -143,8 +153,11 @@ export function ComparisonCards({ tripId, options }: ComparisonCardsProps) {
           type="button"
           onClick={generateTrip}
           disabled={isGenerating || isSaving || selectedOption === null}
-          className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-full bg-[var(--brand)] text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[var(--brand)] text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
         >
+          {isGenerating && (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          )}
           {isGenerating ? "Generating..." : "Generate Itinerary"}
         </button>
       </Card>

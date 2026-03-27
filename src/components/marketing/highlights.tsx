@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ArrowRight, Star, Heart } from "lucide-react";
+import { ArrowRight, Star } from "lucide-react";
 import Link from "next/link";
 
 export function Highlights() {

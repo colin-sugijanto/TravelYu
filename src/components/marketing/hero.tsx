@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
-import { MapPin, Calendar, Users, Search } from "lucide-react";
+import { MapPin, Search } from "lucide-react";
 
 export function Hero() {
   return (

@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
 
 // Simple SVG icons to replace lucide ones to avoid version issues
 const FacebookIcon = ({ className }: { className?: string }) => (
@@ -33,11 +31,7 @@ const YoutubeIcon = ({ className }: { className?: string }) => (
 );
 
 function CurrentYear() {
-  const [year, setYear] = useState(new Date().getFullYear());
-  useEffect(() => {
-    setYear(new Date().getFullYear());
-  }, []);
-  return <span>{year}</span>;
+  return <span>{new Date().getFullYear()}</span>;
 }
 
 export function Footer() {
