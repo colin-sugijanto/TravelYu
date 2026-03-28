@@ -97,6 +97,207 @@ const itineraryPayloadSchema = z.object({
 
 const generatedItinerarySchema = itineraryPayloadSchema.omit({ tripId: true });
 
+const TIME_SLOTS = ["morning", "afternoon", "evening", "night"] as const;
+const ACTIVITY_TYPES = ["accommodation", "transport", "dining", "attraction", "experience", "rest"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const normalized = value.replace(/[,_\s]/g, "");
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function normalizeTimeSlot(value: unknown): (typeof TIME_SLOTS)[number] | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (TIME_SLOTS.includes(normalized as (typeof TIME_SLOTS)[number])) {
+    return normalized as (typeof TIME_SLOTS)[number];
+  }
+
+  if (normalized.includes("morning") || normalized.includes("pagi")) return "morning";
+  if (normalized.includes("afternoon") || normalized.includes("siang")) return "afternoon";
+  if (normalized.includes("evening") || normalized.includes("sore")) return "evening";
+  if (normalized.includes("night") || normalized.includes("malam")) return "night";
+
+  return null;
+}
+
+function normalizeActivityType(value: unknown): (typeof ACTIVITY_TYPES)[number] | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (ACTIVITY_TYPES.includes(normalized as (typeof ACTIVITY_TYPES)[number])) {
+    return normalized as (typeof ACTIVITY_TYPES)[number];
+  }
+
+  if (normalized === "hotel" || normalized === "stay") return "accommodation";
+  if (normalized === "flight" || normalized === "taxi" || normalized === "transfer") return "transport";
+  if (normalized === "food" || normalized === "meal" || normalized === "restaurant") return "dining";
+  if (normalized === "event" || normalized === "activity" || normalized === "tour") return "experience";
+
+  return null;
+}
+
+function normalizeRecoveredGeneratedItinerary(input: unknown): z.infer<typeof generatedItinerarySchema> | null {
+  const direct = generatedItinerarySchema.safeParse(input);
+  if (direct.success) return direct.data;
+  if (!isRecord(input)) return null;
+
+  const flattenedItems: unknown[] = [];
+
+  if (Array.isArray(input.items)) {
+    flattenedItems.push(...input.items);
+  }
+
+  if (Array.isArray(input.days)) {
+    for (const dayEntry of input.days) {
+      if (!isRecord(dayEntry) || !Array.isArray(dayEntry.items)) continue;
+
+      const dayNumber = toNumber(dayEntry.day_number ?? dayEntry.day);
+      for (const rawItem of dayEntry.items) {
+        if (!isRecord(rawItem)) continue;
+        flattenedItems.push({
+          ...rawItem,
+          day: rawItem.day ?? rawItem.day_number ?? dayNumber,
+        });
+      }
+    }
+  }
+
+  if (flattenedItems.length < 1) return null;
+
+  const normalizedItems: Array<Record<string, unknown>> = [];
+
+  flattenedItems.forEach((rawItem, index) => {
+    if (!isRecord(rawItem)) return;
+
+    const dayCandidate = toNumber(rawItem.day ?? rawItem.day_number);
+    const day = dayCandidate ? Math.max(1, Math.floor(dayCandidate)) : Math.max(1, Math.floor(index / 4) + 1);
+
+    const timeSlot =
+      normalizeTimeSlot(rawItem.timeSlot ?? rawItem.time_slot) ??
+      TIME_SLOTS[index % TIME_SLOTS.length];
+
+    const activityType =
+      normalizeActivityType(rawItem.activityType ?? rawItem.activity_type ?? rawItem.type) ??
+      (timeSlot === "night" ? "rest" : "experience");
+
+    const titleRaw = rawItem.title ?? rawItem.name ?? rawItem.activity;
+    const title = typeof titleRaw === "string" && titleRaw.trim().length > 0 ? titleRaw.trim() : `Aktivitas Day ${day}`;
+
+    const descriptionRaw = rawItem.description ?? rawItem.notes;
+    const description =
+      typeof descriptionRaw === "string" && descriptionRaw.trim().length > 0
+        ? descriptionRaw.trim()
+        : `Rencana ${title}`;
+
+    const estCostRaw = toNumber(rawItem.estCostIdr ?? rawItem.est_cost_idr ?? rawItem.estimated_cost_idr);
+    const estCostIdr = Math.max(0, Math.floor(estCostRaw ?? 0));
+
+    const locationAddressRaw =
+      rawItem.locationAddress ?? rawItem.location_address ?? rawItem.address ?? rawItem.vendor_name;
+    const locationAddress =
+      typeof locationAddressRaw === "string" && locationAddressRaw.trim().length > 0
+        ? locationAddressRaw.trim()
+        : undefined;
+
+    const locationLatRaw = toNumber(rawItem.locationLat ?? rawItem.location_lat ?? rawItem.lat ?? rawItem.latitude);
+    const locationLngRaw = toNumber(rawItem.locationLng ?? rawItem.location_lng ?? rawItem.lng ?? rawItem.longitude);
+
+    const locationLat = locationLatRaw !== null ? locationLatRaw : undefined;
+    const locationLng = locationLngRaw !== null ? locationLngRaw : undefined;
+
+    const bookingUrlRaw =
+      (typeof rawItem.bookingUrl === "string" ? rawItem.bookingUrl : undefined) ??
+      (typeof rawItem.booking_url === "string" ? rawItem.booking_url : undefined);
+    const bookingUrl = ensureValidHttpUrl(bookingUrlRaw) ?? undefined;
+
+    const sourceRaw = typeof rawItem.source === "string" ? rawItem.source : "";
+    const source: "internal_db" | "web_search" | "provider_api" | "manual_cs" =
+      sourceRaw === "internal_db" ||
+      sourceRaw === "web_search" ||
+      sourceRaw === "provider_api" ||
+      sourceRaw === "manual_cs"
+        ? sourceRaw
+        : "web_search";
+
+    normalizedItems.push({
+      day,
+      timeSlot,
+      activityType,
+      title,
+      description,
+      estCostIdr,
+      locationAddress,
+      locationLat,
+      locationLng,
+      bookingUrl,
+      source,
+    });
+  });
+
+  if (normalizedItems.length < 1) return null;
+
+  const totalCostCandidate = toNumber(input.totalEstCostIdr ?? input.total_estimated_cost_idr ?? input.totalCostIdr);
+  const sumCosts = normalizedItems.reduce((acc, item) => {
+    const value = toNumber(item.estCostIdr);
+    return acc + Math.max(0, Math.floor(value ?? 0));
+  }, 0);
+
+  const candidate = {
+    totalEstCostIdr: Math.max(0, Math.floor(totalCostCandidate ?? sumCosts)),
+    items: normalizedItems,
+  };
+
+  const parsed = generatedItinerarySchema.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}
+
+function extractObjectFromText(text: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function recoverGeneratedItineraryFromError(error: unknown): z.infer<typeof generatedItinerarySchema> | null {
+  const candidates: unknown[] = [];
+
+  if (isRecord(error)) {
+    if ("value" in error) candidates.push(error.value);
+
+    if (typeof error.text === "string") {
+      const parsedFromText = extractObjectFromText(error.text);
+      if (parsedFromText !== null) candidates.push(parsedFromText);
+    }
+
+    if (isRecord(error.cause)) {
+      if ("value" in error.cause) candidates.push(error.cause.value);
+
+      if (typeof error.cause.text === "string") {
+        const parsedFromCauseText = extractObjectFromText(error.cause.text);
+        if (parsedFromCauseText !== null) candidates.push(parsedFromCauseText);
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    const recovered = normalizeRecoveredGeneratedItinerary(candidate);
+    if (recovered) return recovered;
+  }
+
+  return null;
+}
+
 function toPersistPayload(
   tripId: string,
   generated: z.infer<typeof generatedItinerarySchema>,
@@ -366,11 +567,13 @@ export async function POST(request: Request) {
 
 ## Core Rules
 1. You MUST return structured itinerary data that matches the provided schema.
-2. Every item needs a realistic est_cost_idr based on actual Indonesian 2026 prices.
-3. Balance the day (morning/afternoon/evening) — avoid clustering everything in one slot.
-4. Include transport items between locations if they are >2km apart.
-5. Dining items must be included at least twice per day.
-6. Accommodation must be included on day_number 1 with time_slot 'evening'.
+2. Output MUST be a single JSON object with ONLY top-level keys: totalEstCostIdr (number) and items (array).
+3. Do NOT use alternative keys like trip_id, total_estimated_cost_idr, day_number, or days.
+4. Every item needs a realistic est_cost_idr based on actual Indonesian 2026 prices.
+5. Balance the day (morning/afternoon/evening) — avoid clustering everything in one slot.
+6. Include transport items between locations if they are >2km apart.
+7. Dining items must be included at least twice per day.
+8. Accommodation must be included on day_number 1 with time_slot 'evening'.
 
 ## Indonesian Price Benchmarks (2026)
 - Budget hotel/guesthouse: Rp 200.000–500.000/night
@@ -425,30 +628,52 @@ For items not in the vendor list, set source='web_search'.
         });
         generated = primary.object;
       } catch (primaryError) {
-        console.warn(`[generate-trip] Primary AI generation failed for trip ${body.tripId}. Retrying with compact prompt.`, primaryError);
+        const recoveredFromPrimary = recoverGeneratedItineraryFromError(primaryError);
+        if (recoveredFromPrimary) {
+          console.warn(
+            `[generate-trip] Recovered schema-mismatched primary response for trip ${body.tripId}; continuing without compact retry.`,
+          );
+          generated = recoveredFromPrimary;
+        } else {
+          console.warn(`[generate-trip] Primary AI generation failed for trip ${body.tripId}. Retrying with compact prompt.`, primaryError);
 
-        const COMPACT_SYSTEM_PROMPT = `Generate practical Indonesian trip itineraries in valid structured output.
+          const COMPACT_SYSTEM_PROMPT = `Generate practical Indonesian trip itineraries in valid structured output.
 Rules:
+- Return one JSON object with top-level keys EXACTLY: totalEstCostIdr and items.
+- Do not return days array, trip_id, or snake_case top-level keys.
 - Exactly ${targetDays} days.
 - Include one item per timeslot (morning, afternoon, evening, night) each day.
 - Day 1 evening must be accommodation.
 - Include dining at least in afternoon and night every day.
 - Use realistic 2026 IDR prices and keep descriptions concise.`;
 
-        const compactPrompt = `Trip ID: ${body.tripId}
+          const compactPrompt = `Trip ID: ${body.tripId}
 Intake: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
 Chosen option: ${JSON.stringify(selectedOptionContext)}
 Destination vendors:\n${vendorContext}`;
 
-        const fallback = await generateObject({
-          model,
-          maxRetries: 0,
-          abortSignal: controller.signal,
-          system: COMPACT_SYSTEM_PROMPT,
-          prompt: compactPrompt,
-          schema: generatedItinerarySchema,
-        });
-        generated = fallback.object;
+          try {
+            const fallback = await generateObject({
+              model,
+              maxRetries: 0,
+              abortSignal: controller.signal,
+              system: COMPACT_SYSTEM_PROMPT,
+              prompt: compactPrompt,
+              schema: generatedItinerarySchema,
+            });
+            generated = fallback.object;
+          } catch (fallbackError) {
+            const recoveredFromFallback = recoverGeneratedItineraryFromError(fallbackError);
+            if (!recoveredFromFallback) {
+              throw fallbackError;
+            }
+
+            console.warn(
+              `[generate-trip] Recovered schema-mismatched compact response for trip ${body.tripId}; proceeding with normalized payload.`,
+            );
+            generated = recoveredFromFallback;
+          }
+        }
       }
 
       saveItineraryResult = await persistGeneratedItinerary(toPersistPayload(body.tripId, generated));
