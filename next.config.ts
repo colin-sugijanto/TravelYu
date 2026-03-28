@@ -4,6 +4,11 @@ import type { NextConfig } from "next";
 const nextConfig = {
   cacheComponents: true,
   turbopack: {},
+  experimental: {
+    serverActions: {
+      maxDuration: 600,
+    },
+  },
   images: {
     unoptimized: true,
     remotePatterns: [

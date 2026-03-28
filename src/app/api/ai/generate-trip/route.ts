@@ -366,7 +366,12 @@ export async function POST(request: Request) {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000);
+    const timeoutId = setTimeout(() => {
+      console.warn(`[generate-trip] Timeout reached for trip ${body.tripId}, aborting...`);
+      controller.abort();
+    }, 600000);
+
+    console.log(`[generate-trip] Starting generation for trip ${body.tripId} with 10min timeout`);
 
     const todayJakarta = new Intl.DateTimeFormat("id-ID", {
       timeZone: "Asia/Jakarta",
@@ -455,6 +460,7 @@ IMPORTANT: You MUST call the save_itinerary tool with complete itinerary before 
     const savedResult = saveItineraryResult as SaveItineraryResult | null;
 
     if (!savedResult) {
+      console.log(`[generate-trip] Primary save failed, attempting fallback for trip ${body.tripId}`);
       const fallback = await generateText({
         model,
         maxRetries: 1,
@@ -511,6 +517,7 @@ Return ONLY a valid JSON object (without markdown) with this exact structure:
     }
 
     clearTimeout(timeoutId);
+    console.log(`[generate-trip] Generation completed for trip ${body.tripId}, result: ${saveItineraryResult?.ok ? 'success' : 'failed'}`);
 
     const finalSavedResult = (saveItineraryResult as SaveItineraryResult | null) ?? null;
 
