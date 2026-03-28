@@ -12,6 +12,35 @@ function getRequestUrl(input: Parameters<typeof fetch>[0]): string | undefined {
   return undefined;
 }
 
+function shouldUseJsonObjectResponseFormat(body: Record<string, unknown>): boolean {
+  const modelId = typeof body.model === "string" ? body.model.toLowerCase() : "";
+  return modelId.startsWith("stepfun/");
+}
+
+function normalizeResponseFormat(body: Record<string, unknown>): {
+  body: Record<string, unknown>;
+  changed: boolean;
+} {
+  const responseFormat = isObject(body.response_format) ? body.response_format : null;
+  if (!responseFormat) return { body, changed: false };
+
+  if (responseFormat.type !== "json_schema") {
+    return { body, changed: false };
+  }
+
+  if (!shouldUseJsonObjectResponseFormat(body)) {
+    return { body, changed: false };
+  }
+
+  return {
+    body: {
+      ...body,
+      response_format: { type: "json_object" },
+    },
+    changed: true,
+  };
+}
+
 const fetchWithDevGuardrailRelaxation: typeof fetch = async (input, init) => {
   const isDev = process.env.NODE_ENV !== "production";
   const requestUrl = getRequestUrl(input);
@@ -20,7 +49,7 @@ const fetchWithDevGuardrailRelaxation: typeof fetch = async (input, init) => {
     requestUrl?.includes("openrouter.ai/api/v1/chat/completions") ||
     requestUrl?.includes("openrouter.ai/api/v1/completions");
 
-  if (!isDev || !isTextGenerationEndpoint || typeof init?.body !== "string") {
+  if (!isTextGenerationEndpoint || typeof init?.body !== "string") {
     return fetch(input, init);
   }
 
@@ -28,16 +57,32 @@ const fetchWithDevGuardrailRelaxation: typeof fetch = async (input, init) => {
     const parsedBody = JSON.parse(init.body) as unknown;
     if (!isObject(parsedBody)) return fetch(input, init);
 
-    const provider = isObject(parsedBody.provider) ? parsedBody.provider : {};
+    const normalized = normalizeResponseFormat(parsedBody);
+    let nextBody: Record<string, unknown> = normalized.body;
+    let changed = normalized.changed;
 
-    const nextBody = {
-      ...parsedBody,
+    if (!isDev) {
+      if (!changed) return fetch(input, init);
+
+      return fetch(input, {
+        ...init,
+        body: JSON.stringify(nextBody),
+      });
+    }
+
+    const provider = isObject(nextBody.provider) ? nextBody.provider : {};
+
+    nextBody = {
+      ...nextBody,
       provider: {
         ...provider,
         data_collection: "allow",
         allow_fallbacks: true,
       },
     };
+    changed = true;
+
+    if (!changed) return fetch(input, init);
 
     return fetch(input, {
       ...init,

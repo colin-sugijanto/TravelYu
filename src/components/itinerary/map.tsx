@@ -5,11 +5,71 @@ import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { createGoogleMapsLink } from "@/lib/utils";
 import type { ItineraryItem } from "@/types/domain";
 
-export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
-  const points = items.filter((item) => item.location_lat !== null && item.location_lng !== null).slice(0, 12);
+function ensureValidHttpUrl(value: string | null | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
 
-  const lats = points.map((item) => item.location_lat as number);
-  const lngs = points.map((item) => item.location_lng as number);
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function isMapProviderUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname.toLowerCase();
+
+    if (host.includes("maps.app.goo.gl")) return true;
+    if (host.includes("google.com") && path.includes("/maps")) return true;
+    if (host.includes("openstreetmap.org")) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function getMapLink(item: ItineraryItem) {
+  const derivedMapLink = createGoogleMapsLink({
+    lat: item.location_lat,
+    lng: item.location_lng,
+    address: item.location_address,
+    title: item.title,
+  });
+
+  if (derivedMapLink) return derivedMapLink;
+
+  const bookingUrl = ensureValidHttpUrl(item.booking_url);
+  if (!bookingUrl) return null;
+
+  return isMapProviderUrl(bookingUrl) ? bookingUrl : null;
+}
+
+export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
+  const pointsWithCoordinates = items
+    .filter((item) => item.location_lat !== null && item.location_lng !== null)
+    .slice(0, 12);
+
+  const points = items
+    .filter((item) => {
+      if (item.location_lat !== null && item.location_lng !== null) return true;
+      if (item.location_address?.trim()) return true;
+      return Boolean(getMapLink(item));
+    })
+    .slice(0, 12);
+
+  const firstAvailableMapLink = points
+    .map((item) => getMapLink(item))
+    .find((url): url is string => Boolean(url));
+
+  const lats = pointsWithCoordinates.map((item) => item.location_lat as number);
+  const lngs = pointsWithCoordinates.map((item) => item.location_lng as number);
 
   const minLat = lats.length > 0 ? Math.min(...lats) : -8.4095;
   const maxLat = lats.length > 0 ? Math.max(...lats) : -8.2095;
@@ -20,7 +80,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
   const centerLng = (minLng + maxLng) / 2;
   const mapKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 
-  const markerParams = points
+  const markerParams = pointsWithCoordinates
     .map((item) => `${item.location_lng as number},${item.location_lat as number}`)
     .join("|");
 
@@ -37,9 +97,9 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-alt)] p-3">
         {points.length > 0 ? (
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
-            {markerParams && mapKey ? (
+            {pointsWithCoordinates.length > 0 && markerParams && mapKey ? (
               <Image src={staticMapUrl} alt="Trip map overview" width={1200} height={600} className="h-72 w-full object-cover" unoptimized />
-            ) : (
+            ) : pointsWithCoordinates.length > 0 ? (
               <div className="space-y-2 p-2">
                 <iframe title="Trip map overview" src={staticMapUrl} className="h-72 w-full rounded-lg" loading="lazy" />
                 <a
@@ -50,6 +110,21 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
                 >
                   Buka peta penuh di OpenStreetMap
                 </a>
+              </div>
+            ) : (
+              <div className="flex h-72 flex-col items-center justify-center gap-2 px-5 text-center">
+                <p className="text-sm font-semibold text-[var(--text)]">Koordinat belum tersedia untuk itinerary ini.</p>
+                <p className="text-xs text-[var(--text-soft)]">TravelYu tetap menyiapkan link peta per aktivitas di daftar bawah.</p>
+                {firstAvailableMapLink ? (
+                  <a
+                    href={firstAvailableMapLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
+                  >
+                    Buka lokasi pertama di Google Maps
+                  </a>
+                ) : null}
               </div>
             )}
           </div>
@@ -65,12 +140,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
                 <p className="font-semibold">{item.title}</p>
                 <p className="text-xs text-[var(--text-soft)]">{item.location_address ?? "Unknown"}</p>
                 {(() => {
-                  const mapsUrl = createGoogleMapsLink({
-                    lat: item.location_lat,
-                    lng: item.location_lng,
-                    address: item.location_address,
-                    title: item.title,
-                  });
+                  const mapsUrl = getMapLink(item);
 
                   if (!mapsUrl) return null;
 

@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   title: "TravelYu!",
   description: "AI-assisted personal travel planning for Indonesian destinations",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
