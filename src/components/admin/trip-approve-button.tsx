@@ -16,7 +16,7 @@ export function TripApproveButton({ tripId }: TripApproveButtonProps) {
     setLoading(true);
 
     try {
-      const response = await fetch(`/api/admin/trip/${encodeURIComponent(tripId)}/approve`, {
+      const response = await fetch(`/api/admin/trips/${encodeURIComponent(tripId)}/approve`, {
         method: "POST",
       });
 

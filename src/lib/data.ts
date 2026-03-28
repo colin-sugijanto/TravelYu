@@ -156,9 +156,77 @@ export async function getItineraryItems(tripId: string): Promise<ItineraryItem[]
   }
 }
 
+export type PackingItem = { item: string; category: string; checked: boolean };
+
+export async function getOrGeneratePackingList(
+  tripId: string,
+): Promise<PackingItem[]> {
+  if (!hasSupabaseEnv()) return mockPackingList as PackingItem[];
+
+  // 1. Check if already generated & cached in intake_data
+  try {
+    const { data: tripRow } = await supabaseAdmin
+      .from("trips")
+      .select("intake_data, status")
+      .eq("id", tripId)
+      .maybeSingle();
+
+    if (!tripRow) return mockPackingList as PackingItem[];
+
+    const intakeData = (tripRow.intake_data ?? {}) as Record<string, unknown>;
+
+    if (Array.isArray(intakeData.packingList) && intakeData.packingList.length > 0) {
+      return intakeData.packingList as PackingItem[];
+    }
+
+    // Only generate for workspace-ready trips
+    if (!["approved", "active", "completed"].includes(String(tripRow.status))) {
+      return mockPackingList as PackingItem[];
+    }
+
+    // 2. Generate via AI
+    const destination = String(intakeData.where ?? "Indonesia");
+    const vibe = String(intakeData.vibe ?? "");
+    const when = String(intakeData.when ?? "3 hari");
+    const who = String(intakeData.who ?? "");
+
+    const { generateText } = await import("ai");
+    const { model } = await import("@/lib/ai/openrouter");
+
+    const { text } = await generateText({
+      model,
+      maxRetries: 1,
+      prompt: `Generate packing list untuk trip ke ${destination} (${when}), vibe: ${vibe}, peserta: ${who}.
+Return JSON array only, no markdown:
+[{"item": "...", "category": "Essentials|Clothing|Documents|Health|Electronics|Activities", "checked": false}]
+Max 25 items. Very concise item names in Bahasa Indonesia.`,
+    });
+
+    // Extract JSON from response
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error("No JSON array found");
+    const parsed = JSON.parse(jsonMatch[0]) as PackingItem[];
+
+    // 3. Cache back to intake_data
+    await supabaseAdmin
+      .from("trips")
+      .update({
+        intake_data: { ...intakeData, packingList: parsed },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", tripId);
+
+    return parsed;
+  } catch {
+    return mockPackingList as PackingItem[];
+  }
+}
+
+/** @deprecated Use getOrGeneratePackingList instead */
 export async function getPackingList() {
   return mockPackingList;
 }
+
 
 export async function getVendors(): Promise<VendorSummary[]> {
   "use cache";

@@ -27,32 +27,122 @@ const compareTool = tool({
       .min(2)
       .max(3),
   }),
-  execute: async (input) => {
-    await supabaseAdmin.from("comparison_options").delete().eq("trip_id", input.tripId);
-
-    const rows = input.options.map((option) => ({
-      trip_id: input.tripId,
-      option_number: option.optionNumber,
-      summary: {
-        title: option.title,
-        destinationHighlights: option.destinationHighlights,
-        vibeTags: option.vibeTags,
-        estimatedBudgetIdr: option.estimatedBudgetIdr,
-        rationale: option.rationale,
-      },
-      is_selected: option.optionNumber === 1,
-    }));
-
-    const { error } = await supabaseAdmin.from("comparison_options").insert(rows);
-    if (!error) {
-      revalidateTag(`trip:${input.tripId}:comparison-options`, "max");
-      revalidateTag(`trip:${input.tripId}`, "max");
-      revalidateTag("admin:metrics", "max");
-    }
-
-    return { ok: !error, error: error?.message };
-  },
+  execute: async (input) => saveComparisonOptions(input.tripId, input.options),
 });
+
+type CompareOptionInput = {
+  optionNumber: number;
+  title: string;
+  destinationHighlights: string[];
+  vibeTags: string[];
+  estimatedBudgetIdr: number;
+  rationale: string;
+};
+
+async function saveComparisonOptions(tripId: string, options: CompareOptionInput[]) {
+  await supabaseAdmin.from("comparison_options").delete().eq("trip_id", tripId);
+
+  const rows = options.map((option) => ({
+    trip_id: tripId,
+    option_number: option.optionNumber,
+    summary: {
+      title: option.title,
+      destinationHighlights: option.destinationHighlights,
+      vibeTags: option.vibeTags,
+      estimatedBudgetIdr: option.estimatedBudgetIdr,
+      rationale: option.rationale,
+    },
+    is_selected: option.optionNumber === 1,
+  }));
+
+  const { error } = await supabaseAdmin.from("comparison_options").insert(rows);
+  if (!error) {
+    revalidateTag(`trip:${tripId}:comparison-options`, "max");
+    revalidateTag(`trip:${tripId}`, "max");
+    revalidateTag("admin:metrics", "max");
+  }
+
+  return { ok: !error, error: error?.message };
+}
+
+function inferDestinationFromSummary(summary: string) {
+  const knownDestinations = [
+    "Bali",
+    "Lombok",
+    "Yogyakarta",
+    "Jakarta",
+    "Bandung",
+    "Labuan Bajo",
+    "Raja Ampat",
+    "Bromo",
+    "Nusa Penida",
+    "Surabaya",
+  ];
+
+  const normalized = summary.toLowerCase();
+  return knownDestinations.find((dest) => normalized.includes(dest.toLowerCase())) ?? "Bali";
+}
+
+function inferBudgetBase(summary: string) {
+  const normalized = summary.toLowerCase();
+  const match = normalized.match(/(?:rp\.?\s*)?(\d+(?:[.,]\d+)*)\s*(juta|jt|m|ribu|rb|k)?/i);
+  if (!match) return 6_000_000;
+
+  const raw = Number(match[1].replace(/[.,](?=\d{3}\b)/g, "").replace(/,/g, "."));
+  if (!Number.isFinite(raw) || raw <= 0) return 6_000_000;
+
+  const suffix = (match[2] ?? "").toLowerCase();
+  if (suffix === "juta" || suffix === "jt" || suffix === "m") return Math.round(raw * 1_000_000);
+  if (suffix === "ribu" || suffix === "rb" || suffix === "k") return Math.round(raw * 1_000);
+  return Math.round(raw);
+}
+
+function buildFallbackComparisonOptions(intakeSummary: string): CompareOptionInput[] {
+  const destination = inferDestinationFromSummary(intakeSummary);
+  const baseBudget = inferBudgetBase(intakeSummary);
+
+  return [
+    {
+      optionNumber: 1,
+      title: `Smart Saver ${destination}`,
+      destinationHighlights: [
+        `${destination} pusat kota`,
+        "Kuliner lokal ramah budget",
+        "Aktivitas gratis/low-cost",
+      ],
+      vibeTags: ["budget", "simple", "local"],
+      estimatedBudgetIdr: Math.max(2_500_000, Math.round(baseBudget * 0.8)),
+      rationale:
+        "Fokus efisiensi biaya tanpa kehilangan pengalaman inti destinasi, cocok untuk traveler yang ingin value terbaik.",
+    },
+    {
+      optionNumber: 2,
+      title: `Balanced Explorer ${destination}`,
+      destinationHighlights: [
+        "Campuran spot populer & hidden gem",
+        "Ritme aktivitas seimbang",
+        "Pilihan makan variatif",
+      ],
+      vibeTags: ["balanced", "comfort", "explore"],
+      estimatedBudgetIdr: Math.max(3_500_000, Math.round(baseBudget)),
+      rationale:
+        "Kombinasi nyaman antara eksplorasi, kuliner, dan waktu istirahat dengan alokasi budget yang seimbang.",
+    },
+    {
+      optionNumber: 3,
+      title: `Premium Escape ${destination}`,
+      destinationHighlights: [
+        "Pengalaman eksklusif",
+        "Tempat makan premium",
+        "Transportasi lebih nyaman",
+      ],
+      vibeTags: ["premium", "comfort+", "exclusive"],
+      estimatedBudgetIdr: Math.max(5_000_000, Math.round(baseBudget * 1.35)),
+      rationale:
+        "Dirancang untuk kenyamanan maksimal dengan pengalaman yang lebih personal dan premium sepanjang perjalanan.",
+    },
+  ];
+}
 
 export async function POST(request: Request) {
   const appUser = await getCurrentAppUser();
@@ -142,6 +232,16 @@ Constraints:
       defaultMessage: "AI compare options gagal sementara. Coba lagi dalam beberapa saat.",
       rateLimitedMessage: "Layanan AI sedang padat (rate-limited). Coba lagi 20-60 detik lagi.",
     });
+
+    const fallbackOptions = buildFallbackComparisonOptions(sanitizedSummary);
+    const fallbackSave = await saveComparisonOptions(body.tripId, fallbackOptions);
+    if (fallbackSave.ok) {
+      return Response.json({
+        ok: true,
+        fallback: true,
+        message: "Menggunakan opsi fallback agar kamu tetap bisa lanjut memilih itinerary.",
+      });
+    }
 
     return Response.json(
       {

@@ -2,10 +2,16 @@ import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/layout/header";
 
-export function AppShell({ children, noPadding = false }: { children: ReactNode, noPadding?: boolean }) {
+interface AppShellProps {
+  children: ReactNode;
+  noPadding?: boolean;
+  showAdminLink?: boolean;
+}
+
+export function AppShell({ children, noPadding = false, showAdminLink = false }: AppShellProps) {
   return (
     <div className="page-shell min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col">
-      <AppHeader />
+      <AppHeader showAdminLink={showAdminLink} />
       {noPadding ? (
         <main className="flex-1 w-full pt-2 sm:pt-3 lg:pt-4 flex flex-col">{children}</main>
       ) : (

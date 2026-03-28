@@ -24,6 +24,16 @@ function shouldKeepGeneratingOnError(error: unknown) {
   return false;
 }
 
+async function markTripStatus(
+  tripId: string,
+  status: "intake" | "generating" | "approved" | "draft",
+) {
+  await supabaseAdmin
+    .from("trips")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", tripId);
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = (await request.json().catch(() => ({}))) as { selectedOption?: number };
@@ -89,16 +99,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         console.error(`Background AI generation returned non-OK for trip ${trip.id}:`, payload);
+
+        const errorText = (payload?.error ?? "").toLowerCase();
+        if (response.status === 429 || errorText.includes("rate-limit") || errorText.includes("rate limited")) {
+          await markTripStatus(trip.id, "approved");
+        } else {
+          await markTripStatus(trip.id, "intake");
+        }
       }
     } catch (error) {
       console.error(`Error during background AI generation for trip ${trip.id}:`, error);
 
       if (!shouldKeepGeneratingOnError(error)) {
-        await supabaseAdmin
-          .from("trips")
-          .update({ status: "intake", updated_at: new Date().toISOString() })
-          .eq("id", trip.id)
-          .eq("status", "generating");
+        await markTripStatus(trip.id, "approved");
       }
     } finally {
       revalidateTag(`trip:${trip.id}`, "max");

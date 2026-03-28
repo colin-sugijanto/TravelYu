@@ -10,6 +10,8 @@ import { checkAiRateLimit } from "@/lib/rate-limit";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { validateRequest, generateTripSchema } from "@/lib/validators";
+import { validateItinerary } from "@/lib/ai/validate-itinerary";
+import { parseTripDateRangeFromWhen, toIsoDateOnly } from "@/lib/trip-dates";
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
@@ -108,14 +110,36 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
       };
     });
 
+    // Validate before insert — log warnings but don't block user on minor issues
+    const validation = validateItinerary(input.items);
+    if (!validation.valid) {
+      console.warn("[generate-trip] Itinerary validation warnings:", validation.errors.join(" | "));
+    }
+
     const { error: insertError } = await supabaseAdmin.from("itinerary_items").insert(rows);
     if (insertError) {
       return { ok: false, error: insertError.message };
     }
 
+    const { data: tripRow } = await supabaseAdmin
+      .from("trips")
+      .select("intake_data")
+      .eq("id", input.tripId)
+      .maybeSingle();
+
+    const intakeData = (tripRow?.intake_data ?? null) as Record<string, unknown> | null;
+    const whenText = typeof intakeData?.when === "string" ? intakeData.when : undefined;
+    const parsedRange = parseTripDateRangeFromWhen(whenText);
+
     const { error: updateError } = await supabaseAdmin
       .from("trips")
-      .update({ status: nextTripStatus, total_est_cost_idr: input.totalEstCostIdr, updated_at: new Date().toISOString() })
+      .update({
+        status: nextTripStatus,
+        total_est_cost_idr: input.totalEstCostIdr,
+        trip_start_date: parsedRange ? toIsoDateOnly(parsedRange.startDate) : null,
+        trip_end_date: parsedRange ? toIsoDateOnly(parsedRange.endDate) : null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", input.tripId);
 
     if (updateError) {
@@ -236,7 +260,7 @@ export async function POST(request: Request) {
 
   const { data: trip, error: tripError } = await supabaseAdmin
     .from("trips")
-    .select("id,user_id,intake_data,selected_comparison_option")
+    .select("id,user_id,intake_data,selected_comparison_option,total_est_cost_idr")
     .eq("id", body.tripId)
     .single();
 
@@ -254,7 +278,8 @@ export async function POST(request: Request) {
     .eq("id", body.tripId);
 
   const intakeData = body.intakeData ?? ((trip.intake_data as Record<string, unknown> | null) ?? {});
-  
+
+
   const sanitizeForPrompt = (obj: Record<string, unknown>): string => {
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
@@ -313,6 +338,32 @@ export async function POST(request: Request) {
     rationale: selectedSummary.rationale ?? "",
   };
 
+  // Fetch verified vendors for this destination from the DB
+  const destinationCity = String(
+    (intakeData as Record<string, unknown>).where ?? ""
+  ).split(/[,\s]/)[0] ?? "";
+
+  const { data: relevantVendors } = destinationCity
+    ? await supabaseAdmin
+        .from("vendors")
+        .select("id,name,type,city,price_tier,avg_rating,tags")
+        .ilike("city", `%${destinationCity}%`)
+        .eq("is_verified", true)
+        .limit(30)
+    : { data: null };
+
+  const vendorContext =
+    relevantVendors && relevantVendors.length > 0
+      ? relevantVendors
+          .map(
+            (v) =>
+              `[${String(v.type).toUpperCase()}] ${
+                v.name
+              } | ${v.city} | ${v.price_tier} | ${Number(v.avg_rating).toFixed(1)}★ | ${Array.isArray(v.tags) ? (v.tags as string[]).join(", ") : ""}`,
+          )
+          .join("\n")
+      : "No pre-seeded vendors found for this destination — generate realistic Indonesian venue names.";
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -325,30 +376,54 @@ export async function POST(request: Request) {
       year: "numeric",
     }).format(new Date());
 
-    const basePrompt = `
-You are TravelYu itinerary generation engine.
+    const GENERATION_SYSTEM_PROMPT = `You are TravelYu Itinerary Engine, an expert trip planner for Indonesian domestic destinations.
 
-Trip ID: ${body.tripId}
+## Core Rules
+1. You MUST call save_itinerary with the complete itinerary. Never output JSON as text.
+2. Every item needs a realistic est_cost_idr based on actual Indonesian 2026 prices.
+3. Balance the day (morning/afternoon/evening) — avoid clustering everything in one slot.
+4. Include transport items between locations if they are >2km apart.
+5. Dining items must be included at least twice per day.
+6. Accommodation must be included on day_number 1 with time_slot 'evening'.
+
+## Indonesian Price Benchmarks (2026)
+- Budget hotel/guesthouse: Rp 200.000–500.000/night
+- Mid hotel: Rp 500.000–1.500.000/night
+- Premium villa: Rp 1.500.000–5.000.000/night
+- Local warung meal: Rp 20.000–50.000/person
+- Mid restaurant: Rp 50.000–150.000/person
+- Premium restaurant: Rp 150.000–500.000/person
+- Local attraction: Rp 15.000–75.000/person
+- Premium experience: Rp 150.000–500.000/person
+- Grab/taxi short trip: Rp 25.000–80.000
+- Fast boat between islands: Rp 150.000–350.000
+- Domestic flight (Jakarta to Bali): Rp 500.000–1.500.000/person
+
+## Itinerary Structure
+- Day 1: Arrival + check-in + welcome dinner + easy orientation activity
+- Middle days: Core attractions + experiences + local food discovery
+- Last day: Morning activity + checkout + departure transport
+- Mix activity types: never 3 attractions in a row; break with dining or rest
+- Include at least 1 hidden gem (non-touristy spot) per trip
+- Pacing: slow=max 2 activities/day, balanced=3-4/day, packed=5-6/day
+
+## Data Priority
+1. Use VERIFIED VENDORS from the context below by exact name (set source='internal_db')
+2. For gaps, generate realistic Indonesian venue names (set source='web_search')`;
+
+    const basePrompt = `Trip ID: ${body.tripId}
 Today in Jakarta: ${todayJakarta}
-Intake data: ${sanitizeForPrompt(intakeData)}
+Intake data: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
 Selected comparison option: ${comparisonOption}
 Selected option details: ${JSON.stringify(selectedOptionContext)}
 
-Generate a 3-5 day itinerary with complete item fields.
-The generated itinerary MUST follow the selected option details (destinations, vibe, and budget direction).
-All recommendations must be real places in Indonesia. Avoid fictional names.
-Each item must include at least one real link in bookingUrl:
-- official vendor/attraction website URL, OR
-- Google Maps link, e.g. https://www.google.com/maps/search/?api=1&query=...
-Include realistic round-trip flights from Jakarta (CGK):
-- outbound flight on day 1 and return flight on the last day
-- use activityType "transport" for both flight items
-- include bookingUrl links for flights (prefer Google Flights links)
-For locationLat/locationLng, include coordinates when known; otherwise omit.
-IMPORTANT: You MUST call the save_itinerary tool with the complete itinerary data before finishing.
-Do not output the itinerary in text form - only call the save_itinerary tool.
+VERIFIED VENDORS FOR THIS DESTINATION:
+${vendorContext}
 
-If you need fresh activity ideas, use search_indonesia_places tool first.
+Generate a complete itinerary following the comparison option details (destinations, vibe, budget).
+Prioritize verified vendors above. Set source='internal_db' for any vendor from the list above.
+For items not in the vendor list, set source='web_search'.
+IMPORTANT: You MUST call the save_itinerary tool with complete itinerary before finishing.
 `;
 
     const result = await generateText({
@@ -356,7 +431,7 @@ If you need fresh activity ideas, use search_indonesia_places tool first.
       maxRetries: 2,
       abortSignal: controller.signal,
       toolChoice: { type: "tool", toolName: "save_itinerary" },
-      system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
+      system: GENERATION_SYSTEM_PROMPT,
       prompt: basePrompt,
       tools: {
         save_itinerary: saveItineraryTool,

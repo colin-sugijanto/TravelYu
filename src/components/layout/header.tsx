@@ -5,12 +5,12 @@ import Image from "next/image";
 import { ClerkLoaded, ClerkLoading, Show, UserButton } from "@clerk/nextjs";
 import { MobileMenu } from "./mobile-menu";
 
-export function AppHeader() {
+export function AppHeader({ showAdminLink = false }: { showAdminLink?: boolean }) {
   return (
     <header className="sticky top-3 z-50 w-full px-3 sm:px-4 lg:px-6">
       <div className="mx-auto flex w-full max-w-[90rem] items-center justify-between rounded-[1.55rem] border border-white/80 bg-white/84 px-3 py-2 shadow-[0_18px_36px_-26px_rgba(15,23,42,0.48)] backdrop-blur-md sm:px-5 lg:px-7">
         <div className="flex items-center gap-3 md:gap-7 lg:gap-10">
-          <MobileMenu />
+          <MobileMenu showAdminLink={showAdminLink} />
 
           <Link href="/" className="inline-flex items-center group relative z-50">
             <Image
@@ -30,12 +30,14 @@ export function AppHeader() {
             >
               Dashboard
             </Link>
-            <Link
-              href="/admin"
-              className="rounded-full px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue)]"
-            >
-              Admin
-            </Link>
+            {showAdminLink ? (
+              <Link
+                href="/admin"
+                className="rounded-full px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue)]"
+              >
+                Admin
+              </Link>
+            ) : null}
             <Link
               href="/trip/new/intake"
               className="rounded-full px-4 py-2 text-sm font-semibold text-slate-800 transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]"

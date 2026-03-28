@@ -11,6 +11,83 @@ import { DefaultChatTransport } from "ai";
 
 const INTAKE_COMPLETE_TOKEN = "[INTAKE_COMPLETE]";
 
+type IntakeProgressPayload = {
+  who?: string;
+  vibe?: string;
+  when?: string;
+  where?: string;
+  budget?: string;
+  pacing?: string;
+  specialNeeds?: string;
+};
+
+const DESTINATION_KEYWORDS = [
+  "bali",
+  "lombok",
+  "yogyakarta",
+  "jogja",
+  "jakarta",
+  "bandung",
+  "surabaya",
+  "nusa penida",
+  "komodo",
+  "raja ampat",
+  "labuan bajo",
+  "manado",
+  "flores",
+  "bromo",
+  "gili",
+];
+
+const VIBE_KEYWORDS = [
+  "healing",
+  "adventure",
+  "petualangan",
+  "kuliner",
+  "budaya",
+  "santai",
+  "romantic",
+  "romantis",
+  "family",
+  "keluarga",
+];
+
+function extractIntakeParams(text: string): IntakeProgressPayload {
+  const normalized = text.toLowerCase();
+  const payload: IntakeProgressPayload = {};
+
+  const whoMatch = normalized.match(
+    /(?:kami|saya|aku|ada)\s+(\d+)\s+orang|\b(pasangan|keluarga|sendiri|solo|teman)\b/i,
+  );
+  if (whoMatch) payload.who = whoMatch[0];
+
+  const detectedVibes = VIBE_KEYWORDS.filter((keyword) => normalized.includes(keyword));
+  if (detectedVibes.length > 0) payload.vibe = detectedVibes.join(", ");
+
+  const destination = DESTINATION_KEYWORDS.find((keyword) => normalized.includes(keyword));
+  if (destination) payload.where = destination;
+
+  const whenMatch = normalized.match(
+    /(\d{1,2}\s*[-–]\s*\d{1,2}\s+\w+|\w+\s+\d{4}|\d+\s*hari\s*\d*\s*malam|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)/i,
+  );
+  if (whenMatch) payload.when = whenMatch[0];
+
+  const budgetMatch = normalized.match(/(?:rp\.?\s*)?(\d+(?:[.,]\d+)*)\s*(?:juta|ribu|k|rb)/i);
+  if (budgetMatch) payload.budget = budgetMatch[0];
+
+  if (/\b(santai|pelan|slow)\b/i.test(normalized)) payload.pacing = "slow";
+  else if (/\b(padat|packed|banyak)\b/i.test(normalized)) payload.pacing = "packed";
+  else if (/\b(balanced|seimbang)\b/i.test(normalized)) payload.pacing = "balanced";
+
+  if (/\b(vegetarian|vegan|halal|alergi|aksesibilitas|kursi roda|disabilitas|lansia|anak kecil)\b/i.test(normalized)) {
+    payload.specialNeeds = "ada";
+  } else if (/\b(tidak ada|ga ada|gak ada|none)\b/i.test(normalized)) {
+    payload.specialNeeds = "tidak ada";
+  }
+
+  return payload;
+}
+
 const FIELD_PATTERNS: Record<string, RegExp[]> = {
   who: [
     /\b(saya|kami|aku|pasangan|suami|istri|keluarga|teman|rombongan|solo|sendiri|anak)\b/i,
@@ -134,6 +211,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   const [input, setInput] = useState("");
   const [isGeneratingOptions, setIsGeneratingOptions] = useState(false);
   const [compareError, setCompareError] = useState<string | null>(null);
+  const [serverIntakeComplete, setServerIntakeComplete] = useState(false);
   const autoAdvanceTriggeredRef = useRef(false);
 
   const { messages, sendMessage, status } = useChat({
@@ -165,11 +243,25 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     [normalizedMessages],
   );
 
-  const isIntakeCompleted = useMemo(() => hasAssistantCompletionSignal(messageTexts), [messageTexts]);
+  const tokenDetectedComplete = useMemo(() => hasAssistantCompletionSignal(messageTexts), [messageTexts]);
 
-  const flattenedText = useMemo(
-    () => messageTexts.map((message) => stripControlTokens(message.text)).join("\n"),
+  const isIntakeCompleted = tokenDetectedComplete || serverIntakeComplete;
+
+  const flattenedText = useMemo(() => messageTexts.map((message) => stripControlTokens(message.text)).join("\n"), [messageTexts]);
+
+  const userOnlyConversationText = useMemo(
+    () =>
+      messageTexts
+        .filter((message) => message.role === "user")
+        .map((message) => stripControlTokens(message.text).trim())
+        .filter(Boolean)
+        .join("\n"),
     [messageTexts],
+  );
+
+  const intakeProgressPayload = useMemo(
+    () => extractIntakeParams(userOnlyConversationText),
+    [userOnlyConversationText],
   );
 
   const intakeSummaryForCompare = useMemo(() => {
@@ -184,8 +276,8 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   }, [flattenedText, messageTexts]);
 
   const completed = useMemo(() => {
-    return requiredFields.filter((field) => isFieldCompleted(field, flattenedText)).length;
-  }, [flattenedText, requiredFields]);
+    return requiredFields.filter((field) => isFieldCompleted(field, userOnlyConversationText)).length;
+  }, [requiredFields, userOnlyConversationText]);
 
   const progress = Math.round((completed / requiredFields.length) * 100);
 
@@ -226,10 +318,78 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   }, [intakeSummaryForCompare, isGeneratingOptions, router, tripId]);
 
   useEffect(() => {
+    if (serverIntakeComplete) return;
+    if (!userOnlyConversationText.trim()) return;
+
+    const payload = intakeProgressPayload;
+    if (Object.keys(payload).length === 0) return;
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      void fetch(`/api/trip/${encodeURIComponent(tripId)}/intake-progress`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      }).catch(() => {
+        // non-blocking; intake must continue even if background save fails
+      });
+    }, 500);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [intakeProgressPayload, serverIntakeComplete, tripId, userOnlyConversationText]);
+
+  useEffect(() => {
+    if (tokenDetectedComplete) {
+      setServerIntakeComplete(true);
+      return;
+    }
+
+    if (isLoading) return;
+    if (messageTexts.length < 2) return;
+
+    const last = messageTexts[messageTexts.length - 1];
+    if (!last || last.role !== "assistant") return;
+
+    const conversationHistory = userOnlyConversationText.slice(0, 5000);
+
+    if (!conversationHistory.trim()) return;
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      void fetch(`/api/trip/${encodeURIComponent(tripId)}/intake-check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationHistory, mode }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const data = (await response.json()) as { complete?: boolean };
+          if (data.complete) {
+            setServerIntakeComplete(true);
+          }
+        })
+        .catch(() => {
+          // non-blocking fallback check
+        });
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [isLoading, messageTexts, mode, tokenDetectedComplete, tripId, userOnlyConversationText]);
+
+  useEffect(() => {
+    if (isLoading) return;
     if (!isIntakeCompleted || autoAdvanceTriggeredRef.current) return;
     autoAdvanceTriggeredRef.current = true;
     void generateOptions();
-  }, [generateOptions, isIntakeCompleted]);
+  }, [generateOptions, isIntakeCompleted, isLoading]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -320,7 +480,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
         <Progress className="mt-3" value={progress} />
         <div className="mt-4 space-y-2 text-sm">
           {requiredFields.map((field) => {
-            const done = isFieldCompleted(field, flattenedText);
+              const done = isFieldCompleted(field, userOnlyConversationText);
             return (
                <div key={field} className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-[var(--bg-alt)] px-3 py-2">
                 <span className="capitalize">{FIELD_LABELS[field] ?? field}</span>

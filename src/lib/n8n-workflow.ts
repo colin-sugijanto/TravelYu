@@ -59,6 +59,10 @@ export const travelYuNotificationWorkflow = {
             { conditions: { options: { caseSensitive: true }, conditions: [{ leftValue: "={{$json.event_type}}", rightValue: "cs_approved", operator: { type: "string", operation: "equals" } }] } },
             { conditions: { options: { caseSensitive: true }, conditions: [{ leftValue: "={{$json.event_type}}", rightValue: "trip_reminder_h1", operator: { type: "string", operation: "equals" } }] } },
             { conditions: { options: { caseSensitive: true }, conditions: [{ leftValue: "={{$json.event_type}}", rightValue: "vendor_contact", operator: { type: "string", operation: "equals" } }] } },
+            { conditions: { options: { caseSensitive: true }, conditions: [{ leftValue: "={{$json.event_type}}", rightValue: "post_trip_review", operator: { type: "string", operation: "equals" } }] } },
+            { conditions: { options: { caseSensitive: true }, conditions: [{ leftValue: "={{$json.event_type}}", rightValue: "trip_completed", operator: { type: "string", operation: "equals" } }] } },
+            { conditions: { options: { caseSensitive: true }, conditions: [{ leftValue: "={{$json.event_type}}", rightValue: "points_earned", operator: { type: "string", operation: "equals" } }] } },
+            { conditions: { options: { caseSensitive: true }, conditions: [{ leftValue: "={{$json.event_type}}", rightValue: "cs_reply", operator: { type: "string", operation: "equals" } }] } },
           ],
         },
       },
@@ -132,6 +136,74 @@ export const travelYuNotificationWorkflow = {
       },
     },
     {
+      id: "11",
+      name: "Set Message Post Trip Review",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [700, 280],
+      parameters: {
+        mode: "manual",
+        assignments: {
+          assignments: [
+            { name: "subject", value: "={{$json.subject_override || 'Bagaimana perjalananmu?'}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', trip kamu sudah selesai! Yuk tulis ulasan dan dapatkan 50 poin untuk tiap ulasan vendor.')}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Halo ' + $json.user_name + '! Trip sudah selesai 🎉 Jangan lupa tulis ulasan untuk mendapat poin rewards ya!')}}", type: "string" },
+          ],
+        },
+      },
+    },
+    {
+      id: "12",
+      name: "Set Message Trip Completed",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [700, 360],
+      parameters: {
+        mode: "manual",
+        assignments: {
+          assignments: [
+            { name: "subject", value: "={{$json.subject_override || 'Trip kamu sudah selesai'}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Selamat ' + $json.user_name + '! Trip ' + $json.trip_id + ' sudah ditandai selesai.')}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Trip ' + $json.trip_id + ' sudah selesai. Terima kasih sudah pakai TravelYu!')}}", type: "string" },
+          ],
+        },
+      },
+    },
+    {
+      id: "13",
+      name: "Set Message Points Earned",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [700, 440],
+      parameters: {
+        mode: "manual",
+        assignments: {
+          assignments: [
+            { name: "subject", value: "={{$json.subject_override || 'Poin kamu bertambah'}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', poin loyalty kamu bertambah. Cek dashboard untuk detail terbaru.')}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Poin kamu bertambah! Cek saldo loyalty terbaru di TravelYu ya ✨')}}", type: "string" },
+          ],
+        },
+      },
+    },
+    {
+      id: "14",
+      name: "Set Message CS Reply",
+      type: "n8n-nodes-base.set",
+      typeVersion: 3.4,
+      position: [700, 520],
+      parameters: {
+        mode: "manual",
+        assignments: {
+          assignments: [
+            { name: "subject", value: "={{$json.subject_override || 'Tanggapan dari TravelYu Customer Success'}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', tim CS kami telah membalas pesan kamu.')}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Tim CS TravelYu sudah membalas pesan kamu. Cek detailnya di dashboard.')}}", type: "string" },
+          ],
+        },
+      },
+    },
+    {
       id: "8",
       name: "Switch Channel",
       type: "n8n-nodes-base.switch",
@@ -189,12 +261,20 @@ export const travelYuNotificationWorkflow = {
         [{ node: "Set Message CS Approved", type: "main", index: 0 }],
         [{ node: "Set Message Trip Reminder", type: "main", index: 0 }],
         [{ node: "Set Message Vendor Contact", type: "main", index: 0 }],
+        [{ node: "Set Message Post Trip Review", type: "main", index: 0 }],
+        [{ node: "Set Message Trip Completed", type: "main", index: 0 }],
+        [{ node: "Set Message Points Earned", type: "main", index: 0 }],
+        [{ node: "Set Message CS Reply", type: "main", index: 0 }],
       ],
     },
     "Set Message Itinerary Ready": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
     "Set Message CS Approved": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
     "Set Message Trip Reminder": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
     "Set Message Vendor Contact": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
+    "Set Message Post Trip Review": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
+    "Set Message Trip Completed": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
+    "Set Message Points Earned": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
+    "Set Message CS Reply": { main: [[{ node: "Switch Channel", type: "main", index: 0 }]] },
     "Switch Channel": {
       main: [
         [{ node: "Send Email Gmail", type: "main", index: 0 }],

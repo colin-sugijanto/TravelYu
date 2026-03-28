@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-export function MobileMenu() {
+export function MobileMenu({ showAdminLink = false }: { showAdminLink?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
 
@@ -29,13 +29,15 @@ export function MobileMenu() {
             >
               Dashboard
             </Link>
-            <Link
-              href="/admin"
-              className={`rounded-2xl px-4 py-3 transition-all hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue)] ${pathname === "/admin" ? "bg-[var(--brand-blue-soft)] text-[var(--brand-blue)]" : "text-slate-800"}`}
-              onClick={() => setIsOpen(false)}
-            >
-              Admin
-            </Link>
+            {showAdminLink ? (
+              <Link
+                href="/admin"
+                className={`rounded-2xl px-4 py-3 transition-all hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue)] ${pathname === "/admin" ? "bg-[var(--brand-blue-soft)] text-[var(--brand-blue)]" : "text-slate-800"}`}
+                onClick={() => setIsOpen(false)}
+              >
+                Admin
+              </Link>
+            ) : null}
             <Link
               href="/trip/new/intake"
               className={`rounded-2xl px-4 py-3 transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)] ${pathname === "/trip/new/intake" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-slate-800"}`}

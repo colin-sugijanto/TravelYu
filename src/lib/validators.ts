@@ -7,7 +7,7 @@ export const tripIdSchema = z.object({
 export const generateTripSchema = z.object({
   tripId: z.string().min(1, "Trip ID is required"),
   intakeData: z.record(z.string(), z.unknown()).optional(),
-  selectedOption: z.number().int().min(1).max(3, "Selected option must be 1, 2, or 3"),
+  selectedOption: z.number().int().min(1).max(3, "Selected option must be 1, 2, or 3").optional(),
 });
 
 export const compareOptionsSchema = z.object({
@@ -47,7 +47,16 @@ export const redeemPointsSchema = z.object({
 });
 
 export const notificationEventSchema = z.object({
-  eventType: z.enum(["itinerary_ready", "cs_approved", "trip_reminder_h1", "vendor_contact"]),
+  eventType: z.enum([
+    "itinerary_ready",
+    "cs_approved",
+    "trip_reminder_h1",
+    "vendor_contact",
+    "trip_completed",
+    "post_trip_review",
+    "points_earned",
+    "cs_reply",
+  ]),
   tripId: z.string().optional(),
   userName: z.string().optional(),
   email: z.string().email().optional().nullable(),

@@ -8,7 +8,11 @@ type TravelYuEventType =
   | "itinerary_ready"
   | "cs_approved"
   | "trip_reminder_h1"
-  | "vendor_contact";
+  | "vendor_contact"
+  | "trip_completed"
+  | "post_trip_review"
+  | "points_earned"
+  | "cs_reply";
 
 export interface TravelYuNotificationPayload {
   eventType: TravelYuEventType;
@@ -79,6 +83,12 @@ export async function sendTravelYuNotification(payload: TravelYuNotificationPayl
   const webhookUrl = process.env.N8N_NOTIFICATION_WEBHOOK_URL;
   if (!webhookUrl) {
     return { ok: false, skipped: true, reason: "missing_webhook_url" as const };
+  }
+
+  const hasEmail = Boolean(payload.email && String(payload.email).trim());
+  const hasPhone = Boolean(payload.phoneE164 && String(payload.phoneE164).trim());
+  if (!hasEmail && !hasPhone) {
+    return { ok: false, skipped: true, reason: "missing_recipient_contact" as const };
   }
 
   const body = {
