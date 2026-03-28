@@ -10,6 +10,31 @@ function getNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function collectErrorCandidates(error: unknown): Array<Record<string, unknown>> {
+  const queue: unknown[] = [error];
+  const seen = new Set<Record<string, unknown>>();
+  const out: Array<Record<string, unknown>> = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!isObject(current) || seen.has(current)) continue;
+
+    seen.add(current);
+    out.push(current);
+
+    if (isObject(current.cause)) queue.push(current.cause);
+    if (isObject(current.lastError)) queue.push(current.lastError);
+
+    if (Array.isArray(current.errors)) {
+      for (const nested of current.errors) {
+        queue.push(nested);
+      }
+    }
+  }
+
+  return out;
+}
+
 function getHeaderRecord(error: unknown): Record<string, string> {
   if (!isObject(error)) return {};
 
@@ -25,34 +50,45 @@ function getHeaderRecord(error: unknown): Record<string, string> {
 }
 
 function inferStatusCode(error: unknown): number | null {
-  if (!isObject(error)) return null;
+  const candidates = collectErrorCandidates(error);
 
-  const direct = getNumber(error.statusCode);
-  if (direct !== null) return direct;
+  for (const candidate of candidates) {
+    const direct = getNumber(candidate.statusCode) ?? getNumber(candidate.status);
+    if (direct !== null) return direct;
 
-  if (isObject(error.cause)) {
-    const causeStatus = getNumber(error.cause.statusCode) ?? getNumber(error.cause.status);
-    if (causeStatus !== null) return causeStatus;
-  }
+    const responseBody = getString(candidate.responseBody)?.toLowerCase() ?? "";
+    if (
+      responseBody.includes('"code":429') ||
+      responseBody.includes("too many requests") ||
+      responseBody.includes("rate-limited") ||
+      responseBody.includes("rate limit")
+    ) {
+      return 429;
+    }
 
-  const message = getString(error.message)?.toLowerCase() ?? "";
-  if (message.includes("429") || message.includes("too many requests") || message.includes("rate limit")) {
-    return 429;
+    const message = getString(candidate.message)?.toLowerCase() ?? "";
+    if (message.includes("429") || message.includes("too many requests") || message.includes("rate-limited") || message.includes("rate limit")) {
+      return 429;
+    }
   }
 
   return null;
 }
 
 function inferRetryAfterSeconds(error: unknown): number | null {
-  const headers = getHeaderRecord(error);
+  const candidates = collectErrorCandidates(error);
 
-  const retryAfterValue = headers["retry-after"];
-  if (!retryAfterValue) return null;
+  for (const candidate of candidates) {
+    const headers = getHeaderRecord(candidate);
 
-  const parsed = Number.parseInt(retryAfterValue, 10);
-  if (Number.isNaN(parsed) || parsed <= 0) return null;
+    const retryAfterValue = headers["retry-after"];
+    if (!retryAfterValue) continue;
 
-  return parsed;
+    const parsed = Number.parseInt(retryAfterValue, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  return null;
 }
 
 export function parseAiProviderError(

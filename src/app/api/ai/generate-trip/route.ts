@@ -269,6 +269,44 @@ function extractObjectFromText(text: string): unknown {
   }
 }
 
+function isRateLimitedError(error: unknown): boolean {
+  if (!isRecord(error)) return false;
+
+  const statusCode = typeof error.statusCode === "number" ? error.statusCode : undefined;
+  if (statusCode === 429) return true;
+
+  const responseBody = typeof error.responseBody === "string" ? error.responseBody.toLowerCase() : "";
+  if (
+    responseBody.includes('"code":429') ||
+    responseBody.includes("too many requests") ||
+    responseBody.includes("rate-limited") ||
+    responseBody.includes("rate limit")
+  ) {
+    return true;
+  }
+
+  const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+  if (message.includes("429") || message.includes("too many requests") || message.includes("rate-limited") || message.includes("rate limit")) {
+    return true;
+  }
+
+  if (Array.isArray(error.errors)) {
+    for (const nested of error.errors) {
+      if (isRateLimitedError(nested)) return true;
+    }
+  }
+
+  if (isRecord(error.lastError) && isRateLimitedError(error.lastError)) {
+    return true;
+  }
+
+  if (isRecord(error.cause) && isRateLimitedError(error.cause)) {
+    return true;
+  }
+
+  return false;
+}
+
 function recoverGeneratedItineraryFromError(error: unknown): z.infer<typeof generatedItinerarySchema> | null {
   const candidates: unknown[] = [];
 
@@ -635,6 +673,10 @@ For items not in the vendor list, set source='web_search'.
           );
           generated = recoveredFromPrimary;
         } else {
+          if (isRateLimitedError(primaryError)) {
+            throw primaryError;
+          }
+
           console.warn(`[generate-trip] Primary AI generation failed for trip ${body.tripId}. Retrying with compact prompt.`, primaryError);
 
           const COMPACT_SYSTEM_PROMPT = `Generate practical Indonesian trip itineraries in valid structured output.
@@ -756,7 +798,8 @@ Destination vendors:\n${vendorContext}`;
   } catch (error) {
     console.error("[generate-trip] Error during generation:", error);
 
-    const isTimeout = error instanceof Error && error.name === "AbortError";
+    const isRateLimited = isRateLimitedError(error);
+    const isTimeout = error instanceof Error && error.name === "AbortError" && !isRateLimited;
     
     await supabaseAdmin
       .from("trips")
