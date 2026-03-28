@@ -1,23 +1,24 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #FAFAFA;
-  --bg-alt: #F1F5F9;
-  --card: #FFFFFF;
-  --text: #0F172A;
-  --text-soft: #64748B;
-  
-  /* Travel Yu Brand Colors */
-  --brand: #F97316;        /* Travel Orange */
-  --brand-strong: #EA580C; /* Darker Orange */
-  --brand-blue: #2563EB;   /* Yu Blue */
+  --bg: #fafafa;
+  --bg-alt: #f1f5f9;
+  --card: #ffffff;
+  --text: #0f172a;
+  --text-soft: #64748b;
+
+  --brand: #f97316;
+  --brand-strong: #ea580c;
+  --brand-blue: #2563eb;
   --brand-blue-strong: #1D4ED8;
-  --accent-sky: #0EA5E9;   /* Sky Arrow */
-  
+  --accent-sky: #0ea5e9;
+  --brand-soft: #fff1e8;
+  --brand-blue-soft: #e8f0ff;
+
   --sun: #F59E0B;
-  --danger: #EF4444;
-  --border: #E2E8F0;
-  --ring: #F97316;
+  --danger: #ef4444;
+  --border: #e2e8f0;
+  --ring: #f97316;
   --radius: 16px;
 }
 
@@ -28,11 +29,26 @@
   --font-mono: var(--font-space-mono);
 }
 
+html,
+body {
+  min-height: 100%;
+}
+
 body {
   background-color: var(--bg);
+  background-image:
+    radial-gradient(1200px 440px at 15% -20%, rgba(249, 115, 22, 0.12), transparent 62%),
+    radial-gradient(1200px 440px at 86% -24%, rgba(37, 99, 235, 0.12), transparent 64%),
+    linear-gradient(180deg, #fffefd 0%, var(--bg) 100%);
   color: var(--text);
   font-family: var(--font-manrope), sans-serif;
   overflow-x: hidden;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgba(249, 115, 22, 0.2);
+  color: var(--text);
 }
 
 * {
@@ -40,21 +56,25 @@ body {
 }
 
 .surface {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.9) 100%),
+    var(--card);
+  border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: var(--radius);
   box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    0 20px 40px -34px rgba(15, 23, 42, 0.34),
+    0 12px 24px -22px rgba(15, 23, 42, 0.24);
 }
 
-/* Glassmorphism utility based on inspiration */
 .glass-surface {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.64);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.84);
   border-radius: var(--radius);
+  box-shadow:
+    0 16px 30px -24px rgba(15, 23, 42, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .section-glow {
@@ -67,7 +87,7 @@ body {
   inset: -1px;
   pointer-events: none;
   border-radius: var(--radius);
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(37, 99, 235, 0.17));
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.22), rgba(37, 99, 235, 0.2));
   mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -75,7 +95,26 @@ body {
   padding: 1px;
 }
 
-/* Custom scrollbar to match modern feel */
+.page-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.page-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(620px 280px at 78% 4%, rgba(249, 115, 22, 0.08), transparent 70%),
+    radial-gradient(620px 280px at 24% 16%, rgba(37, 99, 235, 0.08), transparent 72%);
+  pointer-events: none;
+}
+
+.section-divider {
+  border-top: 1px solid rgba(226, 232, 240, 0.7);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

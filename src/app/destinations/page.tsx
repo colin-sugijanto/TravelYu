@@ -56,11 +56,11 @@ const DESTINATIONS = [
 export default function DestinationsPage() {
   return (
     <AppShell noPadding>
-      <div className="bg-[#fcfaf8] min-h-screen pt-24 lg:pt-32 pb-16">
+      <div className="min-h-screen pt-26 pb-16 lg:pt-34">
         <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-8 xl:px-12">
           
           <div className="max-w-3xl mb-12 lg:mb-20 text-center mx-auto">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-semibold text-zinc-900 tracking-tight mb-6">
+            <h1 className="mb-6 text-4xl font-semibold tracking-[-0.03em] text-zinc-900 md:text-5xl lg:text-6xl">
               Tempat untuk <span className="text-orange-500">Dikunjungi</span>
             </h1>
             <p className="text-lg text-zinc-600 leading-relaxed">

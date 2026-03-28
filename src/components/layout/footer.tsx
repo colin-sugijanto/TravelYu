@@ -36,41 +36,45 @@ function CurrentYear() {
 
 export function Footer() {
   return (
-    <footer className="bg-zinc-900 pt-20 pb-10">
+    <footer className="relative overflow-hidden bg-[#0f172a] pb-10 pt-20">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-0 top-0 h-56 w-56 -translate-x-1/3 rounded-full bg-orange-400/16 blur-[90px]" />
+        <div className="absolute bottom-0 right-0 h-64 w-64 translate-x-1/4 rounded-full bg-blue-500/16 blur-[100px]" />
+      </div>
+
       <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-8 xl:px-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 lg:gap-8 mb-16 border-b border-zinc-800 pb-16">
-          
-          {/* Brand Col */}
+        <div className="mb-16 grid grid-cols-1 gap-12 border-b border-zinc-800 pb-16 md:grid-cols-2 lg:grid-cols-12 lg:gap-8">
           <div className="lg:col-span-4">
-            <div className="inline-block mb-6 bg-white p-2 rounded-xl">
-              <Image 
-                src="/logo.png" 
-                alt="Travel Yu Logo" 
-                width={180} 
-                height={50} 
-                className="object-contain h-12 md:h-14 lg:h-16 w-auto mix-blend-multiply"
+            <div className="mb-6 inline-block rounded-xl bg-white p-2 shadow-[0_10px_26px_-18px_rgba(255,255,255,0.6)]">
+              <Image
+                src="/logo.png"
+                alt="Travel Yu Logo"
+                width={180}
+                height={50}
+                className="h-12 w-auto object-contain mix-blend-multiply md:h-14 lg:h-16"
               />
             </div>
+
             <p className="text-zinc-400 leading-relaxed mb-8 max-w-sm">
               Pendamping cerdas Anda untuk menemukan, merencanakan, dan menikmati keindahan luar biasa Indonesia.
             </p>
+
             <div className="flex gap-4">
-              <a href="#" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:bg-orange-500 hover:text-white transition-colors">
+              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 transition-colors hover:bg-orange-500 hover:text-white">
                 <FacebookIcon className="w-5 h-5" />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:bg-orange-500 hover:text-white transition-colors">
+              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 transition-colors hover:bg-orange-500 hover:text-white">
                 <TwitterIcon className="w-5 h-5" />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:bg-orange-500 hover:text-white transition-colors">
+              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 transition-colors hover:bg-orange-500 hover:text-white">
                 <InstagramIcon className="w-5 h-5" />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:bg-orange-500 hover:text-white transition-colors">
+              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 transition-colors hover:bg-orange-500 hover:text-white">
                 <YoutubeIcon className="w-5 h-5" />
               </a>
             </div>
           </div>
 
-          {/* Links Cols */}
           <div className="lg:col-span-2 lg:col-start-6">
             <h4 className="text-white font-semibold mb-6">Perusahaan</h4>
             <ul className="space-y-4">
@@ -102,8 +106,9 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-zinc-500 text-sm">
+        <div className="flex flex-col items-center justify-between gap-4 text-sm text-zinc-500 md:flex-row">
           <p>© <CurrentYear /> TravelYu. Semua hak dilindungi.</p>
+
           <div className="flex items-center gap-2">
             <span>Dibuat dengan</span>
             <svg className="w-4 h-4 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>

@@ -227,10 +227,11 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-      <Card className="p-5">
+      <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
         <CardTitle>AI Intake Agent</CardTitle>
         <p className="mt-1 text-xs text-[var(--text-soft)]">Mode: {mode === "surprise" ? "Surprise Me" : "Standard"}</p>
-        <div className="mt-4 h-[380px] overflow-y-auto rounded-xl bg-[var(--bg-alt)] p-3">
+
+        <div className="mt-4 h-[380px] overflow-y-auto rounded-[1.2rem] border border-slate-200/70 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-3">
           {messages.length === 0 ? (
             <p className="text-sm text-[var(--text-soft)]">Halo! Kita mulai dari siapa yang ikut trip ini?</p>
           ) : (
@@ -238,7 +239,11 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
               {normalizedMessages.map((message) => (
                 <div
                   key={message.id}
-                  className={message.role === "user" ? "rounded-xl bg-blue-100 text-blue-900 p-2 text-sm" : "rounded-xl bg-white p-2 text-sm"}
+                  className={
+                    message.role === "user"
+                      ? "rounded-xl bg-[var(--brand-blue-soft)] p-2 text-sm text-blue-900"
+                      : "rounded-xl border border-slate-200/70 bg-white p-2 text-sm"
+                  }
                 >
                   <p className="whitespace-pre-line leading-relaxed">
                     {message.role === "assistant"
@@ -259,14 +264,14 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
           className="mt-3 flex gap-2"
         >
           <input
-            className="h-11 flex-1 rounded-full border border-[var(--border)] bg-white px-4 text-sm outline-none focus:border-[var(--brand)]"
+            className="h-11 flex-1 rounded-full border border-[var(--border)] bg-white px-4 text-sm outline-none transition-all focus:border-[var(--brand)] focus:ring-2 focus:ring-[rgba(249,115,22,0.2)]"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Tulis jawaban kamu..."
           />
           <button
             type="submit"
-            className="h-11 rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)]"
+            className="h-11 rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-[0_14px_24px_-16px_rgba(249,115,22,0.7)] transition hover:bg-[var(--brand-strong)]"
             disabled={isLoading}
           >
             {isLoading ? "..." : "Kirim"}
@@ -295,7 +300,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
         </button>
       </Card>
 
-      <Card className="p-5">
+      <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
         <CardTitle>Progres Parameter</CardTitle>
         <p className="mt-2 text-sm text-[var(--text-soft)]">
           {completed} / {INTAKE_FIELDS.length} parameter terkumpul
@@ -305,7 +310,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
           {INTAKE_FIELDS.map((field) => {
             const done = isFieldCompleted(field, flattenedText);
             return (
-              <div key={field} className="flex items-center justify-between rounded-lg bg-[var(--bg-alt)] px-3 py-2">
+               <div key={field} className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-[var(--bg-alt)] px-3 py-2">
                 <span className="capitalize">{FIELD_LABELS[field] ?? field}</span>
                 <span className={done ? "text-[var(--brand-strong)]" : "text-[var(--text-soft)]"}>{done ? "Selesai" : "Menunggu"}</span>
               </div>

@@ -25,33 +25,38 @@ export function HiddenGems() {
   ];
 
   return (
-    <section className="py-24 bg-white">
+    <section className="section-divider py-24">
       <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-8 xl:px-12">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-semibold text-zinc-900 mb-6">
+        <div className="mx-auto mb-16 max-w-3xl text-center">
+          <h2 className="text-3xl font-semibold tracking-[-0.025em] text-zinc-900 md:text-4xl lg:text-5xl">
             Temukan permata tersembunyi
           </h2>
-          <p className="text-zinc-600 text-lg">
+
+          <p className="mt-6 text-lg text-zinc-600">
             Hindari keramaian dan temukan keindahan alam yang tak tersentuh, direkomendasikan oleh mesin perjalanan cerdas kami.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
           {gems.map((gem, i) => (
-            <div key={i} className="group relative h-[400px] rounded-3xl overflow-hidden cursor-pointer">
-              <Image 
+            <article
+              key={i}
+              className="group relative h-[400px] cursor-pointer overflow-hidden rounded-[1.9rem] border border-white/20 shadow-[0_22px_44px_-28px_rgba(15,23,42,0.54)]"
+            >
+              <Image
                 src={gem.image}
                 alt={gem.title}
                 fill
-                className="object-cover group-hover:scale-110 transition-transform duration-700"
+                className="object-cover transition-transform duration-700 group-hover:scale-110"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-900/80 via-zinc-900/20 to-transparent"></div>
-              
-              <div className="absolute bottom-0 left-0 w-full p-6 translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                <p className="text-orange-400 text-sm font-medium mb-1">{gem.location}</p>
-                <h3 className="text-white text-xl font-semibold">{gem.title}</h3>
+
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-900/82 via-zinc-900/30 to-transparent" />
+
+              <div className="absolute bottom-0 left-0 w-full translate-y-2 p-6 transition-transform duration-300 group-hover:translate-y-0">
+                <p className="mb-1 text-sm font-medium text-orange-300">{gem.location}</p>
+                <h3 className="text-xl font-semibold tracking-[-0.01em] text-white">{gem.title}</h3>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       </div>

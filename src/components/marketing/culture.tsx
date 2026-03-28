@@ -4,65 +4,70 @@ import { ArrowRight } from "lucide-react";
 
 export function Culture() {
   return (
-    <section className="py-24 bg-zinc-900 relative overflow-hidden">
-      <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
-        <div className="flex flex-col lg:flex-row items-center gap-16 lg:gap-24">
-          
-          <div className="flex-1 relative w-full h-[500px] lg:h-[700px] order-2 lg:order-1">
-            <div className="absolute top-0 right-[10%] w-[70%] h-[70%] rounded-3xl overflow-hidden shadow-2xl z-20">
-              <Image 
-                src="https://images.unsplash.com/photo-1544644181-1484b3fdfc62?q=80&w=800&auto=format&fit=crop" 
-                alt="Balinese Dancers" 
+    <section className="section-divider relative overflow-hidden bg-[#0f172a] py-24">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-20 top-18 h-56 w-56 rounded-full bg-orange-400/22 blur-[96px]" />
+        <div className="absolute bottom-0 right-0 h-64 w-64 rounded-full bg-sky-500/22 blur-[110px]" />
+      </div>
+
+      <div className="relative z-10 mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-8 xl:px-12">
+        <div className="flex flex-col items-center gap-16 lg:flex-row lg:gap-24">
+          <div className="order-2 relative h-[500px] w-full flex-1 lg:order-1 lg:h-[700px]">
+            <div className="absolute right-[10%] top-0 z-20 h-[70%] w-[70%] overflow-hidden rounded-[2rem] border border-white/15 shadow-[0_30px_68px_-28px_rgba(2,6,23,0.85)]">
+              <Image
+                src="https://images.unsplash.com/photo-1544644181-1484b3fdfc62?q=80&w=800&auto=format&fit=crop"
+                alt="Balinese Dancers"
                 fill
                 className="object-cover"
               />
             </div>
-            <div className="absolute bottom-[5%] left-0 w-[60%] h-[55%] rounded-3xl overflow-hidden shadow-xl z-30 border-8 border-zinc-900">
-              <Image 
-                src="https://images.unsplash.com/photo-1518002054494-3a6f94352e9d?q=80&w=800&auto=format&fit=crop" 
-                alt="Indonesian Cuisine" 
+
+            <div className="absolute bottom-[5%] left-0 z-30 h-[55%] w-[60%] overflow-hidden rounded-[1.75rem] border-[7px] border-[#0f172a] shadow-[0_28px_56px_-26px_rgba(2,6,23,0.85)]">
+              <Image
+                src="https://images.unsplash.com/photo-1518002054494-3a6f94352e9d?q=80&w=800&auto=format&fit=crop"
+                alt="Indonesian Cuisine"
                 fill
                 className="object-cover"
               />
             </div>
-            {/* Decorative element */}
-            <div className="absolute top-[20%] left-[20%] w-64 h-64 bg-orange-500 rounded-full blur-[100px] opacity-20 z-0"></div>
+
+            <div className="absolute left-[20%] top-[20%] z-0 h-64 w-64 rounded-full bg-orange-500/18 blur-[110px]" />
           </div>
-          
-          <div className="flex-1 order-1 lg:order-2">
-            <div className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-sm text-zinc-300 mb-8 font-medium backdrop-blur-sm">
+
+          <div className="order-1 flex-1 lg:order-2">
+            <div className="mb-8 inline-flex items-center rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-sm font-medium text-zinc-200 backdrop-blur-sm">
               Pengalaman Imersif
             </div>
-            
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif font-semibold text-white mb-6 leading-[1.1]">
-              <span className="text-orange-500">Pengalaman lokal</span> <br />
+
+            <h2 className="mb-6 text-4xl font-semibold leading-[1.08] tracking-[-0.025em] text-white md:text-5xl lg:text-6xl">
+              <span className="text-orange-500">Pengalaman lokal</span>
+              <br />
               terkurasi oleh AI
             </h2>
-            
-            <p className="text-zinc-400 text-lg mb-10 leading-relaxed max-w-xl">
+
+            <p className="mb-10 max-w-xl text-lg leading-relaxed text-zinc-300">
               Jelajahi lebih dari sekadar rute turis. Mesin AI kami menganalisis ribuan titik data untuk menyusun pengalaman yang menghubungkan Anda dengan tradisi lokal, kuliner autentik, dan warisan tersembunyi yang menjadikan Indonesia benar-benar istimewa.
             </p>
-            
-            <div className="grid grid-cols-2 gap-8 mb-10">
+
+            <div className="mb-10 grid grid-cols-2 gap-6 rounded-3xl border border-white/10 bg-white/7 p-6 backdrop-blur-sm sm:gap-8">
               <div>
-                <h4 className="text-3xl font-bold text-white mb-2">17k+</h4>
-                <p className="text-zinc-400">Pulau untuk dijelajahi</p>
+                <h4 className="mb-1 text-3xl font-bold text-white">17k+</h4>
+                <p className="text-sm text-zinc-300 sm:text-base">Pulau untuk dijelajahi</p>
               </div>
               <div>
-                <h4 className="text-3xl font-bold text-white mb-2">300+</h4>
-                <p className="text-zinc-400">Kelompok etnis</p>
+                <h4 className="mb-1 text-3xl font-bold text-white">300+</h4>
+                <p className="text-sm text-zinc-300 sm:text-base">Kelompok etnis</p>
               </div>
             </div>
-            
-            <Link 
+
+            <Link
               href="/activities"
-              className="inline-flex items-center justify-center gap-2 h-14 px-8 bg-white text-zinc-900 rounded-full font-semibold transition-all hover:bg-zinc-100 hover:scale-[1.02]"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-white px-8 font-semibold text-zinc-900 shadow-[0_16px_32px_-20px_rgba(255,255,255,0.6)] transition-all hover:-translate-y-0.5 hover:bg-zinc-100"
             >
               Temukan aktivitas
               <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
-          
         </div>
       </div>
     </section>

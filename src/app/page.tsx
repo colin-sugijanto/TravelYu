@@ -10,7 +10,7 @@ import { Footer } from "@/components/layout/footer";
 export default function Home() {
   return (
     <AppShell noPadding>
-      <div className="bg-[#fcfaf8] min-h-screen">
+      <div className="min-h-screen">
         <Hero />
         <Highlights />
         <Culture />

@@ -7,39 +7,45 @@ import { MobileMenu } from "./mobile-menu";
 
 export function AppHeader() {
   return (
-    <header className="sticky top-0 z-50 w-full bg-white shadow-sm border-b border-zinc-100 py-1 sm:py-2">
-      <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between">
-        {/* Logo and Main Nav */}
-        <div className="flex items-center gap-4 md:gap-8 lg:gap-12">
-          {/* Mobile Menu Button */}
+    <header className="sticky top-3 z-50 w-full px-3 sm:px-4 lg:px-6">
+      <div className="mx-auto flex w-full max-w-[90rem] items-center justify-between rounded-[1.55rem] border border-white/80 bg-white/84 px-3 py-2 shadow-[0_18px_36px_-26px_rgba(15,23,42,0.48)] backdrop-blur-md sm:px-5 lg:px-7">
+        <div className="flex items-center gap-3 md:gap-7 lg:gap-10">
           <MobileMenu />
 
           <Link href="/" className="inline-flex items-center group relative z-50">
-            <Image 
-              src="/logo.png" 
-              alt="Travel Yu Logo" 
-              width={260} 
-              height={75} 
-              className="object-contain mix-blend-multiply transition-transform group-hover:scale-105 h-12 sm:h-14 md:h-16 lg:h-18 w-auto"
+            <Image
+              src="/logo.png"
+              alt="Travel Yu Logo"
+              width={260}
+              height={75}
+              className="h-11 w-auto object-contain mix-blend-multiply transition-transform group-hover:scale-[1.02] sm:h-12 md:h-14"
               priority
             />
           </Link>
 
-          <nav className="hidden items-center gap-6 lg:gap-8 md:flex">
-            <Link href="/dashboard" className="text-sm font-medium text-zinc-800 transition-colors hover:text-zinc-900">
+          <nav className="hidden items-center gap-2 md:flex">
+            <Link
+              href="/dashboard"
+              className="rounded-full px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]"
+            >
               Dashboard
             </Link>
-            <Link href="/admin" className="text-sm font-medium text-zinc-800 transition-colors hover:text-zinc-900">
+            <Link
+              href="/admin"
+              className="rounded-full px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-[var(--brand-blue-soft)] hover:text-[var(--brand-blue)]"
+            >
               Admin
             </Link>
-            <Link href="/trip/new/intake" className="text-sm font-medium text-zinc-800 transition-colors hover:text-zinc-900">
+            <Link
+              href="/trip/new/intake"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-slate-800 transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]"
+            >
               Rencanakan Perjalanan
             </Link>
           </nav>
         </div>
 
-        {/* Right side actions */}
-        <div className="flex items-center gap-4 md:gap-6">
+        <div className="flex items-center gap-3 sm:gap-5">
           <ClerkLoading>
             <div className="h-8 w-8" aria-hidden="true" />
           </ClerkLoading>
@@ -48,14 +54,14 @@ export function AppHeader() {
             <Show when="signed-out">
               <Link
                 href="/login?next=%2Fdashboard"
-                className="text-sm font-medium text-zinc-800 transition-colors hover:text-zinc-900"
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition-all hover:border-[var(--brand)] hover:text-[var(--brand-strong)]"
               >
                 Masuk
               </Link>
             </Show>
 
             <Show when="signed-in">
-              <div className="pl-2 md:pl-4 border-l border-zinc-200">
+              <div className="border-l border-slate-200 pl-2 md:pl-4">
                 <UserButton />
               </div>
             </Show>

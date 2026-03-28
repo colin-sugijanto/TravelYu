@@ -12,7 +12,7 @@ export default async function LoginPage({
 
   return (
     <div className="mx-auto max-w-md">
-      <Card className="p-6">
+      <Card className="p-6 shadow-[0_22px_42px_-30px_rgba(15,23,42,0.4)]">
         <CardTitle className="text-xl">Login ke TravelYu</CardTitle>
         <CardText className="mt-1">Gunakan akun Google atau email untuk lanjut.</CardText>
 
