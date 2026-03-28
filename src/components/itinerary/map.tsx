@@ -2,6 +2,7 @@ import Image from "next/image";
 import { MapPin } from "lucide-react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { createGoogleMapsLink } from "@/lib/utils";
 import type { ItineraryItem } from "@/types/domain";
 
 export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
@@ -28,6 +29,8 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       ? `https://api.maptiler.com/maps/streets-v2/static/auto/1200x600@2x.png?key=${encodeURIComponent(mapKey)}&markers=${encodeURIComponent(markerParams)}`
       : `https://www.openstreetmap.org/export/embed.html?bbox=${centerLng - 0.12}%2C${centerLat - 0.08}%2C${centerLng + 0.12}%2C${centerLat + 0.08}&layer=mapnik`;
 
+  const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${centerLat}&mlon=${centerLng}#map=11/${centerLat}/${centerLng}`;
+
   return (
     <Card className="p-4">
       <CardTitle>Map Overview</CardTitle>
@@ -37,7 +40,17 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
             {markerParams && mapKey ? (
               <Image src={staticMapUrl} alt="Trip map overview" width={1200} height={600} className="h-72 w-full object-cover" unoptimized />
             ) : (
-              <iframe title="Trip map overview" src={staticMapUrl} className="h-72 w-full" loading="lazy" />
+              <div className="space-y-2 p-2">
+                <iframe title="Trip map overview" src={staticMapUrl} className="h-72 w-full rounded-lg" loading="lazy" />
+                <a
+                  href={openStreetMapFallbackLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
+                >
+                  Buka peta penuh di OpenStreetMap
+                </a>
+              </div>
             )}
           </div>
         ) : (
@@ -51,6 +64,27 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
               <div>
                 <p className="font-semibold">{item.title}</p>
                 <p className="text-xs text-[var(--text-soft)]">{item.location_address ?? "Unknown"}</p>
+                {(() => {
+                  const mapsUrl = createGoogleMapsLink({
+                    lat: item.location_lat,
+                    lng: item.location_lng,
+                    address: item.location_address,
+                    title: item.title,
+                  });
+
+                  if (!mapsUrl) return null;
+
+                  return (
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
+                    >
+                      Lihat di Google Maps
+                    </a>
+                  );
+                })()}
               </div>
             </div>
           ))}

@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
-import { formatIdr } from "@/lib/utils";
+import { createGoogleMapsLink, formatIdr } from "@/lib/utils";
 import type { ItineraryItem } from "@/types/domain";
 
 interface TimelineProps {
@@ -38,6 +38,41 @@ export function ItineraryTimeline({ items }: TimelineProps) {
                     <Badge tone={item.status === "booked_locked" ? "danger" : "brand"}>{item.status.replaceAll("_", " ")}</Badge>
                   </div>
                   <CardText className="mt-1">{item.description}</CardText>
+                  {(item.booking_url || item.location_address || item.location_lat !== null || item.location_lng !== null) ? (
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      {item.booking_url ? (
+                        <a
+                          href={item.booking_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full border border-[var(--brand)]/30 bg-[var(--brand-soft)] px-2.5 py-1 font-semibold text-[var(--brand-strong)] hover:opacity-85"
+                        >
+                          Buka Link Aktivitas
+                        </a>
+                      ) : null}
+                      {(() => {
+                        const mapsUrl = createGoogleMapsLink({
+                          lat: item.location_lat,
+                          lng: item.location_lng,
+                          address: item.location_address,
+                          title: item.title,
+                        });
+
+                        if (!mapsUrl) return null;
+
+                        return (
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            Lihat di Google Maps
+                          </a>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
                   <div className="mt-2 flex items-center justify-between text-xs text-[var(--text-soft)]">
                     <span>
                       {item.time_slot} · {item.activity_type}

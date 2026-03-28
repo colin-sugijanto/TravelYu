@@ -1,8 +1,28 @@
-import { revalidateTag } from "next/cache";
 import { after } from "next/server";
 
+import { revalidateTag } from "next/cache";
 import { getCurrentAppUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { POST as generateTripHandler } from "@/app/api/ai/generate-trip/route";
+
+function shouldKeepGeneratingOnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  if (message.includes("headers timeout")) return true;
+  if (message.includes("und_err_headers_timeout")) return true;
+  if (message.includes("fetch failed")) return true;
+
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause && typeof cause === "object" && "code" in cause) {
+    const code = String((cause as { code?: unknown }).code ?? "").toLowerCase();
+    if (code === "und_err_headers_timeout" || code === "headers_timeout") {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,34 +68,38 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   after(async () => {
     try {
-      const response = await fetch(new URL("/api/ai/generate-trip", request.url), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(request.headers.get("cookie") ? { cookie: request.headers.get("cookie") as string } : {}),
+      const internalRequest = new Request(
+        new URL("/api/ai/generate-trip", request.url),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(request.headers.get("cookie") ? { cookie: request.headers.get("cookie") as string } : {}),
+          },
+          body: JSON.stringify({
+            tripId: trip.id,
+            intakeData: trip.intake_data,
+            selectedOption,
+          }),
         },
-        body: JSON.stringify({
-          tripId: trip.id,
-          intakeData: trip.intake_data,
-          selectedOption,
-        }),
-      });
+      );
 
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      const response = await generateTripHandler(internalRequest);
 
       if (!response.ok) {
-        console.error(`Background AI generation failed for trip ${trip.id}:`, payload);
-        await supabaseAdmin
-          .from("trips")
-          .update({ status: "intake", updated_at: new Date().toISOString() })
-          .eq("id", trip.id);
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        console.error(`Background AI generation returned non-OK for trip ${trip.id}:`, payload);
       }
     } catch (error) {
       console.error(`Error during background AI generation for trip ${trip.id}:`, error);
-      await supabaseAdmin
-        .from("trips")
-        .update({ status: "intake", updated_at: new Date().toISOString() })
-        .eq("id", trip.id);
+
+      if (!shouldKeepGeneratingOnError(error)) {
+        await supabaseAdmin
+          .from("trips")
+          .update({ status: "intake", updated_at: new Date().toISOString() })
+          .eq("id", trip.id)
+          .eq("status", "generating");
+      }
     } finally {
       revalidateTag(`trip:${trip.id}`, "max");
       revalidateTag(`trip:${trip.id}:items`, "max");

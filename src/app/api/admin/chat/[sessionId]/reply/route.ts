@@ -23,12 +23,16 @@ export async function POST(
 
   const { data: session } = await supabaseAdmin
     .from("cs_chat_sessions")
-    .select("id,messages")
+    .select("id,messages,cs_id")
     .eq("id", sessionId)
     .maybeSingle();
 
   if (!session) {
     return Response.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  if (session.cs_id && session.cs_id !== appUser.id) {
+    return Response.json({ error: "Session is handled by another CS" }, { status: 409 });
   }
 
   const currentMessages = Array.isArray(session.messages) ? session.messages : [];
@@ -54,5 +58,15 @@ export async function POST(
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  return Response.json({ ok: true });
+  const { data: updated } = await supabaseAdmin
+    .from("cs_chat_sessions")
+    .select("id,trip_id,user_id,cs_id,status,messages,created_at,updated_at")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  if (!updated) {
+    return Response.json({ error: "Failed to load updated session" }, { status: 500 });
+  }
+
+  return Response.json({ ok: true, session: updated });
 }

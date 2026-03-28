@@ -20,6 +20,20 @@ Aturan:
 - Gaya bahasa: hangat, ringkas, tidak menghakimi.
 `;
 
+const SURPRISE_MODE_APPENDIX = `
+Mode Surprise Me AKTIF:
+- Jangan minta user menentukan destinasi spesifik di awal.
+- Wajib kumpulkan minimal: who, when, budget, pacing, specialNeeds.
+- Setelah minimal parameter terkumpul, usulkan 2-3 kandidat destinasi Indonesia yang realistis sesuai musim, cuaca, dan budget user.
+- Konfirmasi 1 kandidat terbaik, lalu lanjutkan intake sampai siap comparison.
+`;
+
+const STANDARD_MODE_APPENDIX = `
+Mode Standard AKTIF:
+- Pastikan preferensi destinasi (where) tergali jelas sejak awal.
+- Jika user belum tahu destinasi, boleh tawarkan pindah ke surprise mode.
+`;
+
 export async function POST(request: Request) {
   const appUser = await getCurrentAppUser();
   if (!appUser) {
@@ -41,7 +55,9 @@ export async function POST(request: Request) {
   const result = streamText({
     model,
     maxRetries: 2,
-    system: `${INTAKE_SYSTEM_PROMPT}\nMode trip saat ini: ${mode === "surprise" ? "Surprise Me" : "Standard"}.`,
+    system: `${INTAKE_SYSTEM_PROMPT}
+Mode trip saat ini: ${mode === "surprise" ? "Surprise Me" : "Standard"}.
+${mode === "surprise" ? SURPRISE_MODE_APPENDIX : STANDARD_MODE_APPENDIX}`,
     messages: modelMessages,
   });
 

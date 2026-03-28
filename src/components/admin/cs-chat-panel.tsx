@@ -126,13 +126,30 @@ export function CSChatPanel({ initialSessions }: CSChatPanelProps) {
       },
     }));
 
-    await fetch(`/api/admin/chat/${encodeURIComponent(activeSession.id)}/reply`, {
+    const response = await fetch(`/api/admin/chat/${encodeURIComponent(activeSession.id)}/reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         content: newMessage.content,
       }),
     });
+
+    if (!response.ok) {
+      setRealtimeById((prev) => ({
+        ...prev,
+        [activeSession.id]: activeSession,
+      }));
+      return;
+    }
+
+    const payload = (await response.json().catch(() => null)) as { session?: CSChatSession } | null;
+    const confirmedSession = payload?.session;
+    if (confirmedSession) {
+      setRealtimeById((prev) => ({
+        ...prev,
+        [activeSession.id]: confirmedSession,
+      }));
+    }
   };
 
   return (

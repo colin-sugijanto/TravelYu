@@ -5,6 +5,7 @@ import { BudgetTracker } from "@/components/itinerary/budget-tracker";
 import { EditorChat } from "@/components/itinerary/editor-chat";
 import { ItineraryMap } from "@/components/itinerary/map";
 import { ItineraryTimeline } from "@/components/itinerary/timeline";
+import { TripLiveChat } from "@/components/trip/live-chat";
 import { Card, CardTitle } from "@/components/ui/card";
 import { WeatherBanner } from "@/components/weather/weather-banner";
 import { getCurrentAppUser } from "@/lib/auth";
@@ -134,6 +135,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
           <span className={`self-start sm:self-auto inline-flex px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider border ${statusInfo?.color ?? "bg-slate-100 border-slate-200 text-slate-600"}`}>
             {statusInfo?.label ?? trip.status}
           </span>
+          <span className="sr-only" data-testid="trip-status">{statusInfo?.label ?? trip.status}</span>
         </div>
       </Card>
 
@@ -199,8 +201,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
           <div className="mt-1">
             <WeatherBanner
               city={destinationCity}
-              condition="rain"
-              advice="Ada potensi hujan sore 70% di day 2-3. Disarankan pindahkan outdoor attraction ke pagi hari."
+              fallbackAdvice="Ada potensi perubahan cuaca. Prioritaskan aktivitas outdoor di pagi hari jika memungkinkan."
             />
           </div>
 
@@ -217,6 +218,8 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
 
             <div className="space-y-4">
               <EditorChat tripId={trip.id} userId={appUser.id} />
+
+              <TripLiveChat tripId={trip.id} />
 
               <Suspense fallback={<PanelSkeleton />}>
                 <BudgetSection tripId={trip.id} totalBudget={totalBudget} />

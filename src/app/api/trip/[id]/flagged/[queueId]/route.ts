@@ -84,6 +84,18 @@ export async function PATCH(
     if (type === "delete_item") {
       await supabaseAdmin.from("itinerary_items").delete().eq("id", queueItem.item_id);
     }
+
+    if (type !== "swap_vendor" && type !== "delete_item") {
+      await supabaseAdmin
+        .from("itinerary_items")
+        .update({
+          status: "booked_flexible",
+          flagged_reason: null,
+          resolved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", queueItem.item_id);
+    }
   }
 
   if (action === "reject" && queueItem.item_id) {
@@ -118,6 +130,15 @@ export async function PATCH(
         channelPreference: "both",
       });
     }
+
+    await supabaseAdmin
+      .from("trips")
+      .update({
+        status: "approved",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", queueItem.trip_id)
+      .eq("status", "draft");
   }
 
   return Response.json({ ok: true });

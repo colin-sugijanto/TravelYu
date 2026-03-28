@@ -123,8 +123,14 @@ const FIELD_LABELS: Record<string, string> = {
   specialNeeds: "Kebutuhan Khusus",
 };
 
+const REQUIRED_FIELDS_BY_MODE: Record<"standard" | "surprise", readonly string[]> = {
+  standard: INTAKE_FIELDS,
+  surprise: ["who", "when", "budget", "pacing", "specialNeeds"],
+};
+
 export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   const router = useRouter();
+  const requiredFields = REQUIRED_FIELDS_BY_MODE[mode];
   const [input, setInput] = useState("");
   const [isGeneratingOptions, setIsGeneratingOptions] = useState(false);
   const [compareError, setCompareError] = useState<string | null>(null);
@@ -178,10 +184,10 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   }, [flattenedText, messageTexts]);
 
   const completed = useMemo(() => {
-    return INTAKE_FIELDS.filter((field) => isFieldCompleted(field, flattenedText)).length;
-  }, [flattenedText]);
+    return requiredFields.filter((field) => isFieldCompleted(field, flattenedText)).length;
+  }, [flattenedText, requiredFields]);
 
-  const progress = Math.round((completed / INTAKE_FIELDS.length) * 100);
+  const progress = Math.round((completed / requiredFields.length) * 100);
 
   const send = async () => {
     if (!input.trim() || isLoading) return;
@@ -229,11 +235,17 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
         <CardTitle>AI Intake Agent</CardTitle>
-        <p className="mt-1 text-xs text-[var(--text-soft)]">Mode: {mode === "surprise" ? "Surprise Me" : "Standard"}</p>
+        <p className="mt-1 text-xs text-[var(--text-soft)]">
+          Mode: {mode === "surprise" ? "Surprise Me (AI pilih destinasi)" : "Standard (destinasi dari kamu)"}
+        </p>
 
         <div className="mt-4 h-[380px] overflow-y-auto rounded-[1.2rem] border border-slate-200/70 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-3">
           {messages.length === 0 ? (
-            <p className="text-sm text-[var(--text-soft)]">Halo! Kita mulai dari siapa yang ikut trip ini?</p>
+            <p className="text-sm text-[var(--text-soft)]">
+              {mode === "surprise"
+                ? "Halo! Surprise mode aktif. Ceritakan dulu siapa yang ikut dan tanggal trip-nya."
+                : "Halo! Kita mulai dari siapa yang ikut trip ini?"}
+            </p>
           ) : (
             <div className="space-y-2">
               {normalizedMessages.map((message) => (
@@ -267,7 +279,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
             className="h-11 flex-1 rounded-full border border-[var(--border)] bg-white px-4 text-sm outline-none transition-all focus:border-[var(--brand)] focus:ring-2 focus:ring-[rgba(249,115,22,0.2)]"
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Tulis jawaban kamu..."
+            placeholder={mode === "surprise" ? "Contoh: berdua, awal Juli, budget 12 juta" : "Tulis jawaban kamu..."}
           />
           <button
             type="submit"
@@ -303,11 +315,11 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
         <CardTitle>Progres Parameter</CardTitle>
         <p className="mt-2 text-sm text-[var(--text-soft)]">
-          {completed} / {INTAKE_FIELDS.length} parameter terkumpul
+          {completed} / {requiredFields.length} parameter terkumpul
         </p>
         <Progress className="mt-3" value={progress} />
         <div className="mt-4 space-y-2 text-sm">
-          {INTAKE_FIELDS.map((field) => {
+          {requiredFields.map((field) => {
             const done = isFieldCompleted(field, flattenedText);
             return (
                <div key={field} className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-[var(--bg-alt)] px-3 py-2">

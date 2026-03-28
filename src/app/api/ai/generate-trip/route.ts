@@ -11,6 +11,38 @@ import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications"
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { validateRequest, generateTripSchema } from "@/lib/validators";
 
+const HTTP_URL_REGEX = /^https?:\/\//i;
+
+function ensureValidHttpUrl(value: string | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!HTTP_URL_REGEX.test(trimmed)) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function fallbackMapsUrl(input: {
+  title: string;
+  locationAddress?: string;
+  locationLat?: number;
+  locationLng?: number;
+}) {
+  if (typeof input.locationLat === "number" && typeof input.locationLng === "number") {
+    return `https://www.google.com/maps?q=${input.locationLat},${input.locationLng}`;
+  }
+
+  const query = input.locationAddress?.trim() || input.title.trim();
+  if (!query) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 type ComparisonSummary = {
   title?: string;
   destinationHighlights?: string[];
@@ -35,6 +67,9 @@ const itineraryPayloadSchema = z.object({
       description: z.string(),
       estCostIdr: z.number().int().min(0),
       locationAddress: z.string().optional(),
+      locationLat: z.number().optional(),
+      locationLng: z.number().optional(),
+      bookingUrl: z.string().url().optional(),
       source: z.enum(["internal_db", "web_search", "provider_api", "manual_cs"]).default("web_search"),
     }),
   ),
@@ -46,7 +81,16 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
 
     await supabaseAdmin.from("itinerary_items").delete().eq("trip_id", input.tripId);
 
-    const rows = input.items.map((item, idx) => ({
+    const rows = input.items.map((item, idx) => {
+      const validatedBookingUrl = ensureValidHttpUrl(item.bookingUrl);
+      const fallbackBookingUrl = fallbackMapsUrl({
+        title: item.title,
+        locationAddress: item.locationAddress,
+        locationLat: item.locationLat,
+        locationLng: item.locationLng,
+      });
+
+      return {
       trip_id: input.tripId,
       day_number: item.day,
       time_slot: item.timeSlot,
@@ -56,9 +100,13 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
       description: item.description,
       est_cost_idr: item.estCostIdr,
       location_address: item.locationAddress ?? null,
+      location_lat: typeof item.locationLat === "number" ? item.locationLat : null,
+      location_lng: typeof item.locationLng === "number" ? item.locationLng : null,
+      booking_url: validatedBookingUrl ?? fallbackBookingUrl,
       status: "draft",
       source: item.source,
-    }));
+      };
+    });
 
     const { error: insertError } = await supabaseAdmin.from("itinerary_items").insert(rows);
     if (insertError) {
@@ -269,16 +317,34 @@ export async function POST(request: Request) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000);
 
+    const todayJakarta = new Intl.DateTimeFormat("id-ID", {
+      timeZone: "Asia/Jakarta",
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }).format(new Date());
+
     const basePrompt = `
 You are TravelYu itinerary generation engine.
 
 Trip ID: ${body.tripId}
+Today in Jakarta: ${todayJakarta}
 Intake data: ${sanitizeForPrompt(intakeData)}
 Selected comparison option: ${comparisonOption}
 Selected option details: ${JSON.stringify(selectedOptionContext)}
 
 Generate a 3-5 day itinerary with complete item fields.
 The generated itinerary MUST follow the selected option details (destinations, vibe, and budget direction).
+All recommendations must be real places in Indonesia. Avoid fictional names.
+Each item must include at least one real link in bookingUrl:
+- official vendor/attraction website URL, OR
+- Google Maps link, e.g. https://www.google.com/maps/search/?api=1&query=...
+Include realistic round-trip flights from Jakarta (CGK):
+- outbound flight on day 1 and return flight on the last day
+- use activityType "transport" for both flight items
+- include bookingUrl links for flights (prefer Google Flights links)
+For locationLat/locationLng, include coordinates when known; otherwise omit.
 IMPORTANT: You MUST call the save_itinerary tool with the complete itinerary data before finishing.
 Do not output the itinerary in text form - only call the save_itinerary tool.
 
@@ -333,6 +399,9 @@ Return ONLY a valid JSON object (without markdown) with this exact structure:
       "description": "...",
       "estCostIdr": 0,
       "locationAddress": "optional",
+      "locationLat": 0,
+      "locationLng": 0,
+      "bookingUrl": "https://...",
       "source": "internal_db|web_search|provider_api|manual_cs"
     }
   ]
@@ -341,7 +410,23 @@ Return ONLY a valid JSON object (without markdown) with this exact structure:
 
       const fallbackPayload = parseFallbackItinerary(fallback.text);
       if (fallbackPayload) {
-        const fallbackSavedResult = await persistGeneratedItinerary(fallbackPayload);
+        const normalizedFallbackPayload: z.infer<typeof itineraryPayloadSchema> = {
+          ...fallbackPayload,
+          items: fallbackPayload.items.map((item) => ({
+            ...item,
+            bookingUrl:
+              ensureValidHttpUrl(item.bookingUrl) ??
+              fallbackMapsUrl({
+                title: item.title,
+                locationAddress: item.locationAddress,
+                locationLat: item.locationLat,
+                locationLng: item.locationLng,
+              }) ??
+              undefined,
+          })),
+        };
+
+        const fallbackSavedResult = await persistGeneratedItinerary(normalizedFallbackPayload);
         if (fallbackSavedResult.ok && fallbackSavedResult.itemCount > 0) {
           saveItineraryResult = fallbackSavedResult;
         }

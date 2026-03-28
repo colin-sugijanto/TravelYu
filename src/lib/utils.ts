@@ -51,3 +51,21 @@ export function formatTripName(trip: {
   if (where) return where;
   return trip.public_id;
 }
+
+export function createGoogleMapsLink(input: {
+  lat?: number | null;
+  lng?: number | null;
+  address?: string | null;
+  title?: string | null;
+}) {
+  const { lat, lng, address, title } = input;
+
+  if (typeof lat === "number" && typeof lng === "number") {
+    return `https://www.google.com/maps?q=${lat},${lng}`;
+  }
+
+  const query = address?.trim() || title?.trim();
+  if (!query) return null;
+
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}

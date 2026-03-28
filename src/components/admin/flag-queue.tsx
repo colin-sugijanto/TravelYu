@@ -92,6 +92,8 @@ export function AdminFlagQueue({ items, compact = false }: AdminFlagQueueProps) 
           reviewed_at: new Date().toISOString(),
         },
       }));
+
+      router.refresh();
     } finally {
       setActingId(null);
     }
