@@ -7,6 +7,7 @@ import { ItineraryMap } from "@/components/itinerary/map";
 import { ItineraryTimeline } from "@/components/itinerary/timeline";
 import { TripLiveChat } from "@/components/trip/live-chat";
 import { TripStatusWatcher } from "@/components/trip/trip-status-watcher";
+import { GeneratingPoller } from "@/components/trip/generating-poller";
 import { TripActionBanner } from "@/components/trip/trip-action-banner";
 import { GeneratingProgressClient } from "@/components/trip/generating-progress";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -138,7 +139,10 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
     <div className="space-y-4">
       {/* Realtime status watcher — replaces the old GeneratingPoller */}
       {trip.status === "generating" && (
-        <TripStatusWatcher tripId={trip.id} initialStatus={trip.status} />
+        <>
+          <TripStatusWatcher tripId={trip.id} initialStatus={trip.status} />
+          <GeneratingPoller />
+        </>
       )}
 
       {/* Header */}

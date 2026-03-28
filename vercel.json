@@ -4,5 +4,13 @@
       "path": "/api/cron/trip-reminders",
       "schedule": "0 2 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/ai/generate-trip/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/trip/[id]/generate/route.ts": {
+      "maxDuration": 300
+    }
+  }
 }

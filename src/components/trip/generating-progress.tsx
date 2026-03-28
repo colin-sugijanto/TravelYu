@@ -48,7 +48,7 @@ export function GeneratingProgressClient() {
       </div>
       <div className="flex items-center justify-between text-xs text-zinc-400">
         <span>Waktu berlalu: {formatElapsed(elapsed)}</span>
-        <span>Perkiraan: 30–90 detik</span>
+        <span>Perkiraan: ±5 menit</span>
       </div>
     </div>
   );

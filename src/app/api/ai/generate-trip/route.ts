@@ -1,8 +1,7 @@
-import { generateText, tool } from "ai";
+import { generateObject } from "ai";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
-import { searchIndonesiaPlaces } from "@/lib/ai/tavily";
 import { getCurrentAppUser } from "@/lib/auth";
 import { model } from "@/lib/ai/openrouter";
 import { parseAiProviderError } from "@/lib/ai/errors";
@@ -12,6 +11,11 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { validateRequest, generateTripSchema } from "@/lib/validators";
 import { validateItinerary } from "@/lib/ai/validate-itinerary";
 import { parseTripDateRangeFromWhen, toIsoDateOnly } from "@/lib/trip-dates";
+
+export const maxDuration = 300;
+
+const LOCAL_TIMEOUT_MS = 600_000;
+const VERCEL_TIMEOUT_MS = 240_000;
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
@@ -57,6 +61,20 @@ type SaveItineraryResult =
   | { ok: true; itemCount: number }
   | { ok: false; error: string };
 
+function inferTripDaysForPrompt(intakeData: Record<string, unknown>) {
+  const whenText = typeof intakeData.when === "string" ? intakeData.when : undefined;
+  const parsedRange = parseTripDateRangeFromWhen(whenText);
+
+  if (parsedRange) {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const diffDays =
+      Math.floor((parsedRange.endDate.getTime() - parsedRange.startDate.getTime()) / msPerDay) + 1;
+    return Math.min(10, Math.max(2, Math.floor(diffDays)));
+  }
+
+  return 4;
+}
+
 const itineraryPayloadSchema = z.object({
   tripId: z.string(),
   totalEstCostIdr: z.number().int().min(0),
@@ -76,6 +94,30 @@ const itineraryPayloadSchema = z.object({
     }),
   ),
 });
+
+const generatedItinerarySchema = itineraryPayloadSchema.omit({ tripId: true });
+
+function toPersistPayload(
+  tripId: string,
+  generated: z.infer<typeof generatedItinerarySchema>,
+): z.infer<typeof itineraryPayloadSchema> {
+  return {
+    tripId,
+    totalEstCostIdr: generated.totalEstCostIdr,
+    items: generated.items.map((item) => ({
+      ...item,
+      bookingUrl:
+        ensureValidHttpUrl(item.bookingUrl) ??
+        fallbackMapsUrl({
+          title: item.title,
+          locationAddress: item.locationAddress,
+          locationLat: item.locationLat,
+          locationLng: item.locationLng,
+        }) ??
+        undefined,
+    })),
+  };
+}
 
 async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadSchema>): Promise<SaveItineraryResult> {
   try {
@@ -159,75 +201,8 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
   }
 }
 
-function extractJsonObject(text: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // ignore
-  }
-
-  const fencedMatches = text.match(/```(?:json)?\s*([\s\S]*?)```/gi) ?? [];
-  for (const block of fencedMatches) {
-    const stripped = block.replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
-    try {
-      const parsed = JSON.parse(stripped) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    const slice = text.slice(firstBrace, lastBrace + 1);
-    try {
-      const parsed = JSON.parse(slice) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  return null;
-}
-
-function parseFallbackItinerary(text: string): z.infer<typeof itineraryPayloadSchema> | null {
-  const obj = extractJsonObject(text);
-  if (!obj) return null;
-
-  const parsed = itineraryPayloadSchema.safeParse(obj);
-  if (!parsed.success) {
-    return null;
-  }
-
-  return parsed.data;
-}
-
-function createSaveItineraryTool(onComplete: (result: SaveItineraryResult) => void) {
-  return tool({
-    description: "Save generated itinerary items to Supabase",
-    inputSchema: itineraryPayloadSchema,
-    execute: async (input) => {
-      const result = await persistGeneratedItinerary(input);
-      onComplete(result);
-      return result;
-    },
-  });
-}
-
 export async function POST(request: Request) {
   let saveItineraryResult: SaveItineraryResult | null = null;
-  const saveItineraryTool = createSaveItineraryTool((result) => {
-    saveItineraryResult = result;
-  });
 
   const appUser = await getCurrentAppUser();
   if (!appUser) {
@@ -365,26 +340,32 @@ export async function POST(request: Request) {
       : "No pre-seeded vendors found for this destination — generate realistic Indonesian venue names.";
 
   try {
+    const timeoutMs = process.env.VERCEL ? VERCEL_TIMEOUT_MS : LOCAL_TIMEOUT_MS;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.warn(`[generate-trip] Timeout reached for trip ${body.tripId}, aborting...`);
       controller.abort();
-    }, 600000);
+    }, timeoutMs);
 
-    console.log(`[generate-trip] Starting generation for trip ${body.tripId} with 10min timeout`);
+    try {
+      console.log(
+        `[generate-trip] Starting generation for trip ${body.tripId} with ${(timeoutMs / 1000).toFixed(0)}s timeout`,
+      );
 
-    const todayJakarta = new Intl.DateTimeFormat("id-ID", {
-      timeZone: "Asia/Jakarta",
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    }).format(new Date());
+      const todayJakarta = new Intl.DateTimeFormat("id-ID", {
+        timeZone: "Asia/Jakarta",
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      }).format(new Date());
 
-    const GENERATION_SYSTEM_PROMPT = `You are TravelYu Itinerary Engine, an expert trip planner for Indonesian domestic destinations.
+      const targetDays = inferTripDaysForPrompt(intakeData);
+
+      const GENERATION_SYSTEM_PROMPT = `You are TravelYu Itinerary Engine, an expert trip planner for Indonesian domestic destinations.
 
 ## Core Rules
-1. You MUST call save_itinerary with the complete itinerary. Never output JSON as text.
+1. You MUST return structured itinerary data that matches the provided schema.
 2. Every item needs a realistic est_cost_idr based on actual Indonesian 2026 prices.
 3. Balance the day (morning/afternoon/evening) — avoid clustering everything in one slot.
 4. Include transport items between locations if they are >2km apart.
@@ -416,108 +397,67 @@ export async function POST(request: Request) {
 1. Use VERIFIED VENDORS from the context below by exact name (set source='internal_db')
 2. For gaps, generate realistic Indonesian venue names (set source='web_search')`;
 
-    const basePrompt = `Trip ID: ${body.tripId}
+      const basePrompt = `Trip ID: ${body.tripId}
 Today in Jakarta: ${todayJakarta}
 Intake data: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
 Selected comparison option: ${comparisonOption}
 Selected option details: ${JSON.stringify(selectedOptionContext)}
+Target trip duration: ${targetDays} days
 
 VERIFIED VENDORS FOR THIS DESTINATION:
 ${vendorContext}
 
 Generate a complete itinerary following the comparison option details (destinations, vibe, budget).
+Use day numbers from 1 to ${targetDays}. Cover each day with balanced timeslots.
 Prioritize verified vendors above. Set source='internal_db' for any vendor from the list above.
 For items not in the vendor list, set source='web_search'.
-IMPORTANT: You MUST call the save_itinerary tool with complete itinerary before finishing.
 `;
 
-    const result = await generateText({
-      model,
-      maxRetries: 2,
-      abortSignal: controller.signal,
-      toolChoice: { type: "tool", toolName: "save_itinerary" },
-      system: GENERATION_SYSTEM_PROMPT,
-      prompt: basePrompt,
-      tools: {
-        save_itinerary: saveItineraryTool,
-        search_indonesia_places: tool({
-          description: "Search Indonesian places, attractions, restaurants, and activities.",
-          inputSchema: z.object({
-            query: z.string(),
-            limit: z.number().int().min(1).max(8).default(5),
-          }),
-          execute: async ({ query, limit }) => {
-            const results = await searchIndonesiaPlaces(query, limit);
-            return {
-              ok: true,
-              results,
-            };
-          },
-        }),
-      },
-    });
+      let generated: z.infer<typeof generatedItinerarySchema>;
+      try {
+        const primary = await generateObject({
+          model,
+          maxRetries: 1,
+          abortSignal: controller.signal,
+          system: GENERATION_SYSTEM_PROMPT,
+          prompt: basePrompt,
+          schema: generatedItinerarySchema,
+        });
+        generated = primary.object;
+      } catch (primaryError) {
+        console.warn(`[generate-trip] Primary AI generation failed for trip ${body.tripId}. Retrying with compact prompt.`, primaryError);
 
-    const savedResult = saveItineraryResult as SaveItineraryResult | null;
+        const COMPACT_SYSTEM_PROMPT = `Generate practical Indonesian trip itineraries in valid structured output.
+Rules:
+- Exactly ${targetDays} days.
+- Include one item per timeslot (morning, afternoon, evening, night) each day.
+- Day 1 evening must be accommodation.
+- Include dining at least in afternoon and night every day.
+- Use realistic 2026 IDR prices and keep descriptions concise.`;
 
-    if (!savedResult) {
-      console.log(`[generate-trip] Primary save failed, attempting fallback for trip ${body.tripId}`);
-      const fallback = await generateText({
-        model,
-        maxRetries: 1,
-        system: "You are TravelYu itinerary generation engine for Indonesian destinations.",
-        prompt: `${basePrompt}
+        const compactPrompt = `Trip ID: ${body.tripId}
+Intake: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
+Chosen option: ${JSON.stringify(selectedOptionContext)}
+Destination vendors:\n${vendorContext}`;
 
-Return ONLY a valid JSON object (without markdown) with this exact structure:
-{
-  "tripId": "${body.tripId}",
-  "totalEstCostIdr": 0,
-  "items": [
-    {
-      "day": 1,
-      "timeSlot": "morning|afternoon|evening|night",
-      "activityType": "accommodation|transport|dining|attraction|experience|rest",
-      "title": "...",
-      "description": "...",
-      "estCostIdr": 0,
-      "locationAddress": "optional",
-      "locationLat": 0,
-      "locationLng": 0,
-      "bookingUrl": "https://...",
-      "source": "internal_db|web_search|provider_api|manual_cs"
-    }
-  ]
-}`,
-      });
-
-      const fallbackPayload = parseFallbackItinerary(fallback.text);
-      if (fallbackPayload) {
-        const normalizedFallbackPayload: z.infer<typeof itineraryPayloadSchema> = {
-          ...fallbackPayload,
-          items: fallbackPayload.items.map((item) => ({
-            ...item,
-            bookingUrl:
-              ensureValidHttpUrl(item.bookingUrl) ??
-              fallbackMapsUrl({
-                title: item.title,
-                locationAddress: item.locationAddress,
-                locationLat: item.locationLat,
-                locationLng: item.locationLng,
-              }) ??
-              undefined,
-          })),
-        };
-
-        const fallbackSavedResult = await persistGeneratedItinerary(normalizedFallbackPayload);
-        if (fallbackSavedResult.ok && fallbackSavedResult.itemCount > 0) {
-          saveItineraryResult = fallbackSavedResult;
-        }
-      } else {
-        console.error("[generate-trip] Fallback JSON parse failed");
+        const fallback = await generateObject({
+          model,
+          maxRetries: 0,
+          abortSignal: controller.signal,
+          system: COMPACT_SYSTEM_PROMPT,
+          prompt: compactPrompt,
+          schema: generatedItinerarySchema,
+        });
+        generated = fallback.object;
       }
-    }
 
-    clearTimeout(timeoutId);
-    console.log(`[generate-trip] Generation completed for trip ${body.tripId}, result: ${saveItineraryResult?.ok ? 'success' : 'failed'}`);
+      saveItineraryResult = await persistGeneratedItinerary(toPersistPayload(body.tripId, generated));
+      console.log(
+        `[generate-trip] Generation completed for trip ${body.tripId}, result: ${saveItineraryResult?.ok ? "success" : "failed"}`,
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const finalSavedResult = (saveItineraryResult as SaveItineraryResult | null) ?? null;
 
@@ -586,7 +526,7 @@ Return ONLY a valid JSON object (without markdown) with this exact structure:
 
     return Response.json({
       ok: true,
-      message: result.text,
+      message: "Itinerary generated successfully",
     });
   } catch (error) {
     console.error("[generate-trip] Error during generation:", error);
@@ -603,7 +543,7 @@ Return ONLY a valid JSON object (without markdown) with this exact structure:
 
     const parsed = parseAiProviderError(error, {
       defaultMessage: isTimeout 
-        ? "AI itinerary timeout setelah 3 menit. Coba generate ulang." 
+        ? "AI itinerary timeout sebelum selesai. Coba generate ulang." 
         : "AI itinerary gagal sementara. Coba generate ulang dalam beberapa saat.",
       rateLimitedMessage: "Layanan AI sedang padat (rate-limited). Coba lagi 20-60 detik lagi.",
     });

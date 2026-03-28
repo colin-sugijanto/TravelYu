@@ -5,24 +5,7 @@ import { getCurrentAppUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { POST as generateTripHandler } from "@/app/api/ai/generate-trip/route";
 
-function shouldKeepGeneratingOnError(error: unknown) {
-  if (!(error instanceof Error)) return false;
-
-  const message = error.message.toLowerCase();
-  if (message.includes("headers timeout")) return true;
-  if (message.includes("und_err_headers_timeout")) return true;
-  if (message.includes("fetch failed")) return true;
-
-  const cause = (error as { cause?: unknown }).cause;
-  if (cause && typeof cause === "object" && "code" in cause) {
-    const code = String((cause as { code?: unknown }).code ?? "").toLowerCase();
-    if (code === "und_err_headers_timeout" || code === "headers_timeout") {
-      return true;
-    }
-  }
-
-  return false;
-}
+export const maxDuration = 300;
 
 async function markTripStatus(
   tripId: string,
@@ -100,19 +83,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         console.error(`Background AI generation returned non-OK for trip ${trip.id}:`, payload);
 
-        const errorText = (payload?.error ?? "").toLowerCase();
-        if (response.status === 429 || errorText.includes("rate-limit") || errorText.includes("rate limited")) {
-          await markTripStatus(trip.id, "approved");
-        } else {
-          await markTripStatus(trip.id, "intake");
-        }
+        await markTripStatus(trip.id, "intake");
       }
     } catch (error) {
       console.error(`Error during background AI generation for trip ${trip.id}:`, error);
-
-      if (!shouldKeepGeneratingOnError(error)) {
-        await markTripStatus(trip.id, "approved");
-      }
+      await markTripStatus(trip.id, "intake");
     } finally {
       revalidateTag(`trip:${trip.id}`, "max");
       revalidateTag(`trip:${trip.id}:items`, "max");
