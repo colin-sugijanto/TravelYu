@@ -1,13 +1,107 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { createGoogleMapsLink, formatIdr } from "@/lib/utils";
 import type { ItineraryItem } from "@/types/domain";
+import { VendorModal } from "./vendor-modal";
 
 interface TimelineProps {
   items: ItineraryItem[];
+  tripId: string;
+  /** Allow regen button — only for approved/active trips owned by the user */
+  canRegen?: boolean;
+  /** Show internal vendor detail modal */
+  allowVendorDetails?: boolean;
 }
 
-export function ItineraryTimeline({ items }: TimelineProps) {
+function RegenDayButton({ tripId, dayNumber }: { tripId: string; dayNumber: number }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const router = useRouter();
+  const REQUEST_TIMEOUT_MS = 45000;
+
+  useEffect(() => {
+    if (!done) return;
+
+    const timer = window.setTimeout(() => {
+      setDone(false);
+    }, 2500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [done]);
+
+  const handleRegen = () => {
+    if (pending) return;
+    setError(null);
+    setPending(true);
+    void (async () => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      try {
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => {
+          controller.abort();
+        }, REQUEST_TIMEOUT_MS);
+
+        const res = await fetch(`/api/trip/${tripId}/regen-day`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dayNumber }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const json = (await res.json()) as { error?: string };
+          setError(json.error ?? "Regen gagal.");
+          return;
+        }
+        setDone(true);
+        setError(null);
+        router.refresh();
+      } catch (fetchError) {
+        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+          setError("Regen memakan waktu terlalu lama. Coba lagi sebentar.");
+        } else {
+          setError("Terjadi kesalahan. Coba lagi.");
+        }
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+        setPending(false);
+      }
+    })();
+  };
+
+  if (done) {
+    return (
+      <span className="text-xs font-medium text-green-600">✅ Hari ini sudah diregen</span>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={handleRegen}
+        disabled={pending}
+        className="rounded-full border border-[var(--brand)]/40 bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold text-[var(--brand-strong)] transition hover:opacity-80 disabled:opacity-50"
+      >
+        {pending ? "⏳ Sedang meregen..." : "🔄 Regen hari ini"}
+      </button>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+export function ItineraryTimeline({
+  items,
+  tripId,
+  canRegen = false,
+  allowVendorDetails = true,
+}: TimelineProps) {
   if (items.length === 0) {
     return (
       <Card className="p-4">
@@ -27,7 +121,12 @@ export function ItineraryTimeline({ items }: TimelineProps) {
     <div className="space-y-4">
       {Object.entries(grouped).map(([day, dayItems]) => (
         <Card key={day} className="p-4">
-          <CardTitle>Day {day}</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle>Day {day}</CardTitle>
+            {canRegen && (
+              <RegenDayButton tripId={tripId} dayNumber={Number(day)} />
+            )}
+          </div>
           <div className="mt-3 space-y-3">
             {dayItems
               .sort((a, b) => a.sort_order - b.sort_order)
@@ -57,9 +156,7 @@ export function ItineraryTimeline({ items }: TimelineProps) {
                           address: item.location_address,
                           title: item.title,
                         });
-
                         if (!mapsUrl) return null;
-
                         return (
                           <a
                             href={mapsUrl}
@@ -76,6 +173,11 @@ export function ItineraryTimeline({ items }: TimelineProps) {
                   <div className="mt-2 flex items-center justify-between text-xs text-[var(--text-soft)]">
                     <span>
                       {item.time_slot} · {item.activity_type}
+                      {allowVendorDetails && item.source === "internal_db" && item.vendor_id ? (
+                        <VendorModal vendorId={item.vendor_id} tripId={tripId} />
+                      ) : item.source === "internal_db" ? (
+                        <span className="ml-1.5 rounded-full bg-emerald-50 px-1.5 text-emerald-700 border border-emerald-200">verified</span>
+                      ) : null}
                     </span>
                     <span>{formatIdr(item.est_cost_idr)}</span>
                   </div>

@@ -1,5 +1,8 @@
 import { getCurrentAppUser } from "@/lib/auth";
+import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
+import { scheduleAwardPoints } from "@/lib/points";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findTripByIdentifier, isTripMember } from "@/lib/trip-access";
 import { revalidateTag } from "next/cache";
 
 function sanitizeFileName(input: string): string {
@@ -17,19 +20,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await findTripByIdentifier<{ id: string; user_id: string }>(id, "id,user_id");
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
   if (trip.user_id !== appUser.id) {
-    const { data: member } = await supabaseAdmin
-      .from("group_trip_members")
-      .select("trip_id")
-      .eq("trip_id", trip.id)
-      .eq("user_id", appUser.id)
-      .maybeSingle();
-
+    const member = await isTripMember(trip.id, appUser.id);
     if (!member) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -43,7 +40,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     .limit(20);
 
   if (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ error: "Failed to fetch photos" }, { status: 500 });
   }
 
   const normalized = await Promise.all(
@@ -66,20 +63,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await findTripByIdentifier<{ id: string; user_id: string }>(id, "id,user_id");
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
   const isOwner = trip.user_id === appUser.id;
   if (!isOwner) {
-    const { data: member } = await supabaseAdmin
-      .from("group_trip_members")
-      .select("trip_id")
-      .eq("trip_id", trip.id)
-      .eq("user_id", appUser.id)
-      .maybeSingle();
-
+    const member = await isTripMember(trip.id, appUser.id);
     if (!member) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -111,7 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
 
   if (uploadError) {
-    return Response.json({ error: uploadError.message }, { status: 500 });
+    return Response.json({ error: "Failed to upload photo" }, { status: 500 });
   }
 
   const { error: insertError } = await supabaseAdmin.from("trip_photos").insert({
@@ -122,10 +113,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
 
   if (insertError) {
-    return Response.json({ error: insertError.message }, { status: 500 });
+    return Response.json({ error: "Failed to save photo metadata" }, { status: 500 });
   }
 
   revalidateTag(`trip:${trip.id}:photos`, "max");
+
+  // Award 10 points per photo, capped at the first 20 photos per trip
+  const { count: photoCount } = await supabaseAdmin
+    .from("trip_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("trip_id", trip.id)
+    .eq("user_id", appUser.id);
+
+  if ((photoCount ?? 0) <= 20) {
+    scheduleAwardPoints(appUser.id, 10, "photo_upload", trip.id as string);
+
+    const recipient = await resolveTripRecipient(trip.id as string);
+    if (recipient) {
+      scheduleNotification({
+        eventType: "points_earned",
+        tripId: trip.id as string,
+        userName: recipient.userName,
+        email: recipient.email,
+        phoneE164: recipient.phoneE164,
+        channelPreference: "both",
+        subject: "+10 poin dari upload foto",
+        emailText: "Foto perjalanan berhasil diupload. Kamu mendapatkan +10 poin loyalty TravelYu.",
+        waText: "Foto berhasil diupload! Kamu dapat +10 poin loyalty TravelYu ✨",
+      });
+    }
+  }
 
   return Response.json({ ok: true });
 }
@@ -144,7 +161,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").or(`id.eq.${id},public_id.eq.${id}`).maybeSingle();
+  const { data: trip } = await findTripByIdentifier<{ id: string; user_id: string }>(id, "id,user_id");
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }

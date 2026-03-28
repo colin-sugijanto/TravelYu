@@ -1,11 +1,12 @@
 import { streamText, tool } from "ai";
 
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
-import { itineraryTools } from "@/lib/ai/tools";
+import { createItineraryTools } from "@/lib/ai/tools";
 import { model } from "@/lib/ai/openrouter";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { getItineraryItems } from "@/lib/data";
+import { findTripByIdentifier, isTripMember } from "@/lib/trip-access";
 
 const EDITOR_SYSTEM_PROMPT = `
 Kamu adalah editor itinerary TravelYu.
@@ -30,13 +31,33 @@ export async function POST(request: Request) {
     return blocked;
   }
 
-  const { messages, tripId, userId } = (await request.json()) as {
+  const { messages, tripId } = (await request.json()) as {
     messages: unknown;
     tripId: string;
-    userId?: string;
   };
 
-  const itineraryItems = await getItineraryItems(tripId);
+  if (!tripId || typeof tripId !== "string") {
+    return Response.json({ error: "tripId is required" }, { status: 400 });
+  }
+
+  const { data: trip } = await findTripByIdentifier<{ id: string; user_id: string }>(
+    tripId,
+    "id,user_id",
+  );
+
+  if (!trip) {
+    return Response.json({ error: "Trip not found" }, { status: 404 });
+  }
+
+  const isAdmin = isAdminRole(appUser.role);
+  if (!isAdmin && trip.user_id !== appUser.id) {
+    const member = await isTripMember(trip.id, appUser.id);
+    if (!member) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
+  const itineraryItems = await getItineraryItems(trip.id);
   const itineraryContext = itineraryItems
     .slice(0, 60)
     .map((item) => {
@@ -57,11 +78,16 @@ export async function POST(request: Request) {
     .join("\n");
 
   const modelMessages = await toModelMessages(messages);
+  const itineraryTools = createItineraryTools({
+    tripId: trip.id,
+    appUserId: appUser.id,
+    isAdmin,
+  });
 
   const result = streamText({
     model,
     maxRetries: 2,
-    system: `${EDITOR_SYSTEM_PROMPT}\nTrip ID aktif: ${tripId}\nUser ID aktif: ${userId ?? "unknown"}\n\nCurrent itinerary items:\n${itineraryContext || "(no itinerary items found)"}`,
+    system: `${EDITOR_SYSTEM_PROMPT}\nTrip ID aktif: ${trip.id}\nUser ID aktif: ${appUser.id}\n\nCurrent itinerary items:\n${itineraryContext || "(no itinerary items found)"}`,
     messages: modelMessages,
     tools: {
       update_itinerary_item: tool(itineraryTools.update_itinerary_item),

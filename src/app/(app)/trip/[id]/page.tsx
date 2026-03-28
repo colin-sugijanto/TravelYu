@@ -6,6 +6,9 @@ import { EditorChat } from "@/components/itinerary/editor-chat";
 import { ItineraryMap } from "@/components/itinerary/map";
 import { ItineraryTimeline } from "@/components/itinerary/timeline";
 import { TripLiveChat } from "@/components/trip/live-chat";
+import { TripStatusWatcher } from "@/components/trip/trip-status-watcher";
+import { TripActionBanner } from "@/components/trip/trip-action-banner";
+import { GeneratingProgressClient } from "@/components/trip/generating-progress";
 import { Card, CardTitle } from "@/components/ui/card";
 import { WeatherBanner } from "@/components/weather/weather-banner";
 import { getCurrentAppUser } from "@/lib/auth";
@@ -15,12 +18,18 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { ArrowRight, Clock, MapPin, MessageSquare, RefreshCw } from "lucide-react";
 import { RefreshButton } from "@/components/trip/refresh-button";
-import { GeneratingPoller } from "@/components/trip/generating-poller";
 
-async function TimelineSection({ tripId }: { tripId: string }) {
+async function TimelineSection({
+  tripId,
+  canRegen,
+}: {
+  tripId: string;
+  canRegen?: boolean;
+}) {
   const items = await getItineraryItems(tripId);
-  return <ItineraryTimeline items={items} />;
+  return <ItineraryTimeline items={items} tripId={tripId} canRegen={canRegen} />;
 }
+
 
 async function MapSection({ tripId }: { tripId: string }) {
   const items = await getItineraryItems(tripId);
@@ -70,13 +79,23 @@ const STATUS_INFO: Record<string, { label: string; desc: string; color: string }
   },
   draft: {
     label: "Draft — Menunggu Persetujuan",
-    desc: "Itinerary sudah dibuat. Jika mode development aktif, itinerary akan auto-approved.",
+    desc: "Itinerary sudah dibuat. Menunggu review dari tim TravelYu sebelum bisa diakses.",
     color: "bg-purple-50 border-purple-200 text-purple-800",
   },
   approved: {
-    label: "Disetujui",
+    label: "Disetujui ✓",
     desc: "Itinerary sudah disetujui! Kamu bisa langsung cek detail perjalananmu.",
     color: "bg-green-50 border-green-200 text-green-800",
+  },
+  active: {
+    label: "Perjalanan Aktif 🚀",
+    desc: "Trip sedang berjalan. Selamat menikmati perjalananmu!",
+    color: "bg-teal-50 border-teal-200 text-teal-800",
+  },
+  completed: {
+    label: "Selesai ✨",
+    desc: "Trip selesai! Bagikan pengalamanmu dan dapatkan poin rewards.",
+    color: "bg-zinc-50 border-zinc-200 text-zinc-700",
   },
 };
 
@@ -117,6 +136,11 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="space-y-4">
+      {/* Realtime status watcher — replaces the old GeneratingPoller */}
+      {trip.status === "generating" && (
+        <TripStatusWatcher tripId={trip.id} initialStatus={trip.status} />
+      )}
+
       {/* Header */}
       <Card className="p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -158,6 +182,9 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
               <p className="text-zinc-500 text-sm leading-relaxed">{statusInfo?.desc}</p>
             </div>
 
+            {/* Animated progress messages for generating state */}
+            {trip.status === "generating" && <GeneratingProgressClient />}
+
             {/* Context from intake data */}
             {trip.intake_data?.where && (
               <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-4 text-sm text-left space-y-2">
@@ -183,7 +210,6 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
               {(trip.status === "generating" || trip.status === "draft") && (
                 <RefreshButton />
               )}
-              {trip.status === "generating" && <GeneratingPoller />}
               <Link
                 href="/dashboard"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-zinc-200 text-zinc-700 font-semibold text-sm hover:bg-zinc-50 transition-colors"
@@ -198,6 +224,27 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
       {/* Full workspace — only shown when itinerary is ready */}
       {isWorkspaceReady && (
         <>
+          {/* Activate / Complete banners (owner only, when approved or active) */}
+          {isOwner && (trip.status === "approved" || trip.status === "active") && (
+            <TripActionBanner tripId={trip.id} tripStatus={trip.status} />
+          )}
+
+          {/* Completed trip — show review link */}
+          {trip.status === "completed" && (
+            <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex-1">
+                <p className="font-semibold text-green-800 text-sm">Trip selesai! 🎉</p>
+                <p className="text-green-700 text-xs mt-0.5">Bagikan pengalamanmu dan dapatkan 50 poin untuk tiap ulasan vendor.</p>
+              </div>
+              <Link
+                href={`/trip/${trip.id}/review`}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-green-600 px-4 py-2 text-xs font-bold text-white hover:bg-green-700 transition-colors"
+              >
+                Tulis Ulasan
+              </Link>
+            </div>
+          )}
+
           <div className="mt-1">
             <WeatherBanner
               city={destinationCity}
@@ -205,10 +252,52 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
             />
           </div>
 
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/trip/${trip.id}/packing`}
+                className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Buka Packing List
+              </Link>
+              <Link
+                href={`/trip/${trip.id}/memory`}
+                className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Buka Memory Wall
+              </Link>
+              {trip.status === "completed" ? (
+                <Link
+                  href={`/trip/${trip.id}/review`}
+                  className="inline-flex rounded-full border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-100"
+                >
+                  Tulis Review Vendor
+                </Link>
+              ) : null}
+              <a
+                href={`/api/trip/${trip.id}/export-pdf`}
+                className="inline-flex rounded-full border border-[var(--brand)]/35 bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-strong)] transition hover:opacity-85"
+              >
+                Download PDF Itinerary
+              </a>
+              <a
+                href={`/trip/s/${trip.public_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex rounded-full border border-[var(--brand-blue)]/35 bg-[var(--brand-blue-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-blue)] transition hover:opacity-85"
+              >
+                Lihat Halaman Share
+              </a>
+            </div>
+          </Card>
+
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-4">
               <Suspense fallback={<TimelineSkeleton />}>
-                <TimelineSection tripId={trip.id} />
+                <TimelineSection
+                  tripId={trip.id}
+                  canRegen={isOwner && (trip.status === "approved" || trip.status === "active")}
+                />
               </Suspense>
 
               <Suspense fallback={<PanelSkeleton />}>
@@ -217,7 +306,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
             </div>
 
             <div className="space-y-4">
-              <EditorChat tripId={trip.id} userId={appUser.id} />
+              <EditorChat tripId={trip.id} />
 
               <TripLiveChat tripId={trip.id} />
 

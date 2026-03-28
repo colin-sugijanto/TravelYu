@@ -1,9 +1,14 @@
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
+import { timingSafeEqual } from "crypto";
 
 const allowedEvents = new Set([
   "itinerary_ready",
   "cs_approved",
   "trip_reminder_h1",
+  "trip_completed",
+  "post_trip_review",
+  "points_earned",
+  "cs_reply",
 ]);
 
 export async function POST(request: Request) {
@@ -14,7 +19,13 @@ export async function POST(request: Request) {
   }
 
   const token = request.headers.get("x-travelyu-token");
-  if (!token || token !== expected) {
+  if (!token) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const left = Buffer.from(token);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -38,7 +49,14 @@ export async function POST(request: Request) {
   }
 
   scheduleNotification({
-    eventType: body.eventType as "itinerary_ready" | "cs_approved" | "trip_reminder_h1",
+    eventType: body.eventType as
+      | "itinerary_ready"
+      | "cs_approved"
+      | "trip_reminder_h1"
+      | "trip_completed"
+      | "post_trip_review"
+      | "points_earned"
+      | "cs_reply",
     tripId: recipient.tripId,
     userName: recipient.userName,
     email: recipient.email,

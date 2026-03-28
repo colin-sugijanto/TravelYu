@@ -1,5 +1,7 @@
 import { getCurrentAppUser } from "@/lib/auth";
+import { checkApiRateLimit } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findTripByIdentifier, isTripMember } from "@/lib/trip-access";
 
 type ChatMessage = {
   role: "user" | "cs";
@@ -7,24 +9,17 @@ type ChatMessage = {
   ts: string;
 };
 
-async function hasTripAccess(tripId: string, userId: string) {
-  const { data: trip } = await supabaseAdmin
-    .from("trips")
-    .select("id,user_id")
-    .eq("id", tripId)
-    .maybeSingle();
+async function resolveAccessibleTrip(tripId: string, userId: string) {
+  const { data: trip } = await findTripByIdentifier<{ id: string; user_id: string }>(
+    tripId,
+    "id,user_id",
+  );
 
-  if (!trip) return false;
-  if (trip.user_id === userId) return true;
+  if (!trip) return null;
+  if (trip.user_id === userId) return trip;
 
-  const { data: membership } = await supabaseAdmin
-    .from("group_trip_members")
-    .select("trip_id")
-    .eq("trip_id", tripId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  return Boolean(membership);
+  const member = await isTripMember(trip.id, userId);
+  return member ? trip : null;
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -34,15 +29,18 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await hasTripAccess(id, appUser.id);
-  if (!allowed) {
+  const blocked = await checkApiRateLimit(appUser.id, "trip-chat");
+  if (blocked) return blocked;
+
+  const trip = await resolveAccessibleTrip(id, appUser.id);
+  if (!trip) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { data: session } = await supabaseAdmin
     .from("cs_chat_sessions")
     .select("id,trip_id,user_id,cs_id,status,messages,created_at,updated_at")
-    .eq("trip_id", id)
+    .eq("trip_id", trip.id)
     .eq("user_id", appUser.id)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -65,15 +63,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await hasTripAccess(id, appUser.id);
-  if (!allowed) {
+  const blocked = await checkApiRateLimit(appUser.id, "trip-chat");
+  if (blocked) return blocked;
+
+  const trip = await resolveAccessibleTrip(id, appUser.id);
+  if (!trip) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { data: existing } = await supabaseAdmin
     .from("cs_chat_sessions")
     .select("id,messages,status")
-    .eq("trip_id", id)
+    .eq("trip_id", trip.id)
     .eq("user_id", appUser.id)
     .eq("status", "open")
     .order("updated_at", { ascending: false })
@@ -90,7 +91,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { data: created, error: createError } = await supabaseAdmin
       .from("cs_chat_sessions")
       .insert({
-        trip_id: id,
+        trip_id: trip.id,
         user_id: appUser.id,
         status: "open",
         messages: [nextMessage],
@@ -99,7 +100,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .single();
 
     if (createError) {
-      return Response.json({ error: createError.message }, { status: 500 });
+      return Response.json({ error: "Failed to create chat session" }, { status: 500 });
     }
 
     return Response.json({ ok: true, session: created });
@@ -119,7 +120,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .single();
 
   if (updateError) {
-    return Response.json({ error: updateError.message }, { status: 500 });
+    return Response.json({ error: "Failed to update chat session" }, { status: 500 });
   }
 
   return Response.json({ ok: true, session: updated });

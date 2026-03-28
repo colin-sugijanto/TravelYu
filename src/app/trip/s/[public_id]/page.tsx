@@ -17,7 +17,7 @@ export default async function SharedTripPage({ params }: { params: Promise<{ pub
         <CardTitle>Shared Itinerary</CardTitle>
         <CardText className="mt-1">Public ID: {public_id}</CardText>
       </Card>
-      <ItineraryTimeline items={items} />
+      <ItineraryTimeline items={items} tripId={trip.id} canRegen={false} allowVendorDetails={false} />
     </div>
   );
 }

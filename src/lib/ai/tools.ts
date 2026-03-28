@@ -31,8 +31,19 @@ function extractJsonArray(text: string): string[] | null {
   }
 }
 
-export const itineraryTools = {
-  update_itinerary_item: {
+export interface ItineraryToolContext {
+  tripId: string;
+  appUserId: string;
+  isAdmin: boolean;
+}
+
+function isSameTripScope(context: ItineraryToolContext, tripId: string) {
+  return context.tripId === tripId;
+}
+
+export function createItineraryTools(context: ItineraryToolContext) {
+  return {
+    update_itinerary_item: {
     description: "Update minor editable fields for draft/booked_flexible itinerary item",
     inputSchema: z.object({
       itemId: z.string(),
@@ -54,6 +65,7 @@ export const itineraryTools = {
         .from("itinerary_items")
         .select("id,status,trip_id")
         .eq("id", input.itemId)
+        .eq("trip_id", context.tripId)
         .single();
 
       if (!item) return { ok: false, reason: "Item not found" };
@@ -82,7 +94,7 @@ export const itineraryTools = {
     },
   },
 
-  add_itinerary_item: {
+    add_itinerary_item: {
     description: "Add itinerary item to specific trip day",
     inputSchema: z.object({
       tripId: z.string(),
@@ -104,8 +116,12 @@ export const itineraryTools = {
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
+      if (!isSameTripScope(context, input.tripId)) {
+        return { ok: false, reason: "Forbidden trip scope" };
+      }
+
       const { error } = await supabaseAdmin.from("itinerary_items").insert({
-        trip_id: input.tripId,
+        trip_id: context.tripId,
         day_number: input.dayNumber,
         time_slot: input.timeSlot,
         sort_order: 99,
@@ -118,15 +134,15 @@ export const itineraryTools = {
       });
 
       if (!error) {
-        revalidateTag(`trip:${input.tripId}:items`, "max");
-        revalidateTag(`trip:${input.tripId}`, "max");
+        revalidateTag(`trip:${context.tripId}:items`, "max");
+        revalidateTag(`trip:${context.tripId}`, "max");
       }
 
       return { ok: !error, error: error?.message };
     },
   },
 
-  delete_itinerary_item: {
+    delete_itinerary_item: {
     description: "Delete draft/flexible itinerary item or flag locked item for CS",
     inputSchema: z.object({
       itemId: z.string(),
@@ -134,7 +150,12 @@ export const itineraryTools = {
     execute: async ({ itemId }: { itemId: string }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
-      const { data: item } = await supabaseAdmin.from("itinerary_items").select("id,status,trip_id").eq("id", itemId).single();
+      const { data: item } = await supabaseAdmin
+        .from("itinerary_items")
+        .select("id,status,trip_id")
+        .eq("id", itemId)
+        .eq("trip_id", context.tripId)
+        .single();
 
       if (!item) return { ok: false, reason: "Item not found" };
 
@@ -166,7 +187,7 @@ export const itineraryTools = {
     },
   },
 
-  flag_for_cs_approval: {
+    flag_for_cs_approval: {
     description: "Queue requested major change for CS approval",
     inputSchema: z.object({
       tripId: z.string(),
@@ -181,6 +202,10 @@ export const itineraryTools = {
       requestedChange?: Record<string, unknown>;
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
+
+      if (!isSameTripScope(context, input.tripId)) {
+        return { ok: false, reason: "Forbidden trip scope" };
+      }
 
       const { error } = await supabaseAdmin.from("cs_approval_queue").insert({
         trip_id: input.tripId,
@@ -201,7 +226,7 @@ export const itineraryTools = {
     },
   },
 
-  search_alternatives: {
+    search_alternatives: {
     description: "Find alternative vendors/activities by keyword and city",
     inputSchema: z.object({
       query: z.string(),
@@ -248,7 +273,7 @@ export const itineraryTools = {
     },
   },
 
-  swap_vendor: {
+    swap_vendor: {
     description: "Swap vendor candidate for item, auto-flag if major/confirmed",
     inputSchema: z.object({
       tripId: z.string(),
@@ -268,13 +293,22 @@ export const itineraryTools = {
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
-      const { data: item } = await supabaseAdmin.from("itinerary_items").select("id,status").eq("id", input.itemId).single();
+      if (!isSameTripScope(context, input.tripId)) {
+        return { ok: false, reason: "Forbidden trip scope" };
+      }
+
+      const { data: item } = await supabaseAdmin
+        .from("itinerary_items")
+        .select("id,status,trip_id")
+        .eq("id", input.itemId)
+        .eq("trip_id", context.tripId)
+        .single();
       if (!item) return { ok: false, reason: "Item not found" };
 
       const major = isMajorChange(input);
       if (item.status !== "draft" || major) {
         const { error } = await supabaseAdmin.from("cs_approval_queue").insert({
-          trip_id: input.tripId,
+          trip_id: item.trip_id,
           item_id: input.itemId,
           requested_change: {
             type: "swap_vendor",
@@ -289,7 +323,7 @@ export const itineraryTools = {
         }
 
         revalidateTag("admin:metrics", "max");
-        revalidateTag(`trip:${input.tripId}:items`, "max");
+        revalidateTag(`trip:${item.trip_id}:items`, "max");
         return { ok: true, flagged: true };
       }
 
@@ -302,27 +336,30 @@ export const itineraryTools = {
         return { ok: false, reason: error.message };
       }
 
-      revalidateTag(`trip:${input.tripId}:items`, "max");
-      revalidateTag(`trip:${input.tripId}`, "max");
+      revalidateTag(`trip:${item.trip_id}:items`, "max");
+      revalidateTag(`trip:${item.trip_id}`, "max");
       return { ok: true, flagged: false };
     },
   },
 
-  escalate_to_human_cs: {
+    escalate_to_human_cs: {
     description: "Open CS chat session for traveler",
     inputSchema: z.object({
       tripId: z.string(),
-      userId: z.string(),
       message: z.string().optional(),
     }),
-    execute: async (input: { tripId: string; userId: string; message?: string }) => {
+    execute: async (input: { tripId: string; message?: string }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
+
+      if (!isSameTripScope(context, input.tripId)) {
+        return { ok: false, reason: "Forbidden trip scope" };
+      }
 
       const { data, error } = await supabaseAdmin
         .from("cs_chat_sessions")
         .insert({
-          trip_id: input.tripId,
-          user_id: input.userId,
+          trip_id: context.tripId,
+          user_id: context.appUserId,
           status: "open",
           messages: input.message ? [{ role: "user", content: input.message, ts: new Date().toISOString() }] : [],
         })
@@ -337,7 +374,7 @@ export const itineraryTools = {
     },
   },
 
-  contact_vendor_via_whatsapp: {
+    contact_vendor_via_whatsapp: {
     description: "Send WhatsApp message to vendor via n8n workflow",
     inputSchema: z.object({
       vendorId: z.string(),
@@ -345,6 +382,20 @@ export const itineraryTools = {
     }),
     execute: async (input: { vendorId: string; message: string }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
+
+      if (!context.isAdmin) {
+        const { data: tripVendor } = await supabaseAdmin
+          .from("itinerary_items")
+          .select("id")
+          .eq("trip_id", context.tripId)
+          .eq("vendor_id", input.vendorId)
+          .limit(1)
+          .maybeSingle();
+
+        if (!tripVendor) {
+          return { ok: false, reason: "Vendor tidak terkait dengan trip ini" };
+        }
+      }
 
       const { data: vendor } = await supabaseAdmin.from("vendors").select("id,whatsapp_number").eq("id", input.vendorId).single();
       if (!vendor?.whatsapp_number) return { ok: false, reason: "Vendor WA number not found" };
@@ -372,7 +423,7 @@ export const itineraryTools = {
     },
   },
 
-  get_weather_info: {
+    get_weather_info: {
     description: "Fetch weather forecast details for city/date",
     inputSchema: z.object({ city: z.string() }),
     execute: async ({ city }: { city: string }) => {
@@ -408,7 +459,7 @@ export const itineraryTools = {
     },
   },
 
-  generate_packing_list: {
+    generate_packing_list: {
     description: "Generate packing recommendations based on trip context",
     inputSchema: z.object({
       destination: z.string(),
@@ -460,4 +511,5 @@ Return only a JSON array of strings.`,
       }
     },
   },
-};
+  };
+}

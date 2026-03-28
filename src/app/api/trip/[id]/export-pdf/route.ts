@@ -1,56 +1,127 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { getItineraryItems, getTripById } from "@/lib/data";
+import { isTripMember } from "@/lib/trip-access";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const appUser = await getCurrentAppUser();
+  if (!appUser) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const trip = await getTripById(id);
+  if (!trip) {
+    return Response.json({ error: "Trip not found" }, { status: 404 });
+  }
+
+  const isAdmin = isAdminRole(appUser.role);
+  if (!isAdmin && trip.user_id !== appUser.id) {
+    const member = await isTripMember(trip.id, appUser.id);
+    if (!member) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   const items = await getItineraryItems(trip?.id ?? id);
 
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([595, 842]);
+  let page = pdf.addPage([595, 842]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-  page.drawText("TravelYu Itinerary", {
+  const brandColor = rgb(0.96, 0.45, 0.17); // Orange brand color
+  const darkTextColor = rgb(0.1, 0.1, 0.1);
+  const lightTextColor = rgb(0.4, 0.4, 0.4);
+
+  let cursorY = 800;
+
+  // Header Brand
+  page.drawText("TravelYu", {
     x: 40,
-    y: 800,
-    size: 22,
+    y: cursorY,
+    size: 28,
     font: bold,
-    color: rgb(0.08, 0.2, 0.15),
+    color: brandColor,
   });
 
-  page.drawText(`Trip: ${trip?.public_id ?? id}`, {
+  cursorY -= 30;
+
+  page.drawText("Official Trip Itinerary", {
     x: 40,
-    y: 774,
+    y: cursorY,
+    size: 16,
+    font: bold,
+    color: darkTextColor,
+  });
+
+  cursorY -= 20;
+
+  page.drawText(`Trip Code: ${trip?.public_id ?? id}`, {
+    x: 40,
+    y: cursorY,
     size: 12,
     font,
-    color: rgb(0.2, 0.3, 0.24),
+    color: lightTextColor,
   });
 
-  let cursorY = 744;
-  for (const item of items.slice(0, 24)) {
-    if (cursorY < 60) break;
+  cursorY -= 40;
 
-    page.drawText(`Day ${item.day_number} · ${item.time_slot} · ${item.title}`, {
+  let currentDay = -1;
+
+  for (const item of items) {
+    if (cursorY < 100) {
+      page = pdf.addPage([595, 842]);
+      cursorY = 800;
+    }
+
+    if (item.day_number !== currentDay) {
+      currentDay = item.day_number;
+      page.drawText(`Day ${currentDay}`, {
+        x: 40,
+        y: cursorY,
+        size: 14,
+        font: bold,
+        color: brandColor,
+      });
+      cursorY -= 20;
+    }
+
+    page.drawText(`${item.time_slot.toUpperCase()} · ${item.title}`, {
+      x: 40,
+      y: cursorY,
+      size: 11,
+      font: bold,
+      color: darkTextColor,
+    });
+
+    cursorY -= 15;
+    page.drawText(item.description, {
       x: 40,
       y: cursorY,
       size: 10,
-      font: bold,
-      color: rgb(0.1, 0.2, 0.15),
+      font,
+      color: lightTextColor,
+      maxWidth: 515,
     });
 
-    cursorY -= 12;
-    page.drawText(item.description, {
-      x: 48,
-      y: cursorY,
+    // Approximate height for description
+    const lines = Math.ceil(item.description.length / 90);
+    cursorY -= (15 * lines) + 15;
+  }
+
+  // Footer on all pages
+  const pages = pdf.getPages();
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i];
+    p.drawText(`Page ${i + 1} of ${pages.length} · Created by TravelYu AI`, {
+      x: 40,
+      y: 30,
       size: 9,
       font,
-      color: rgb(0.24, 0.33, 0.29),
-      maxWidth: 500,
+      color: lightTextColor,
     });
-
-    cursorY -= 22;
   }
 
   const bytes = await pdf.save();
