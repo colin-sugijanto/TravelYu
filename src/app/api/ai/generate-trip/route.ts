@@ -16,6 +16,7 @@ export const maxDuration = 300;
 
 const LOCAL_TIMEOUT_MS = 600_000;
 const VERCEL_TIMEOUT_MS = 240_000;
+const GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS = 90_000;
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
@@ -358,6 +359,26 @@ function toPersistPayload(
   };
 }
 
+async function generateObjectWithHardTimeout(
+  label: string,
+  run: () => Promise<{ object: z.infer<typeof generatedItinerarySchema> }>,
+  abort: () => void,
+): Promise<{ object: z.infer<typeof generatedItinerarySchema> }> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const hardTimeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        abort();
+        reject(new Error(`[generate-trip] ${label} exceeded ${GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS}ms`));
+      }, GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS);
+    });
+
+    return await Promise.race([run(), hardTimeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadSchema>): Promise<SaveItineraryResult> {
   try {
     const nextTripStatus = process.env.NODE_ENV === "production" ? "draft" : "approved";
@@ -656,15 +677,20 @@ For items not in the vendor list, set source='web_search'.
 
       let generated: z.infer<typeof generatedItinerarySchema>;
       try {
-        const primary = await generateObject({
-          model,
-          maxRetries: 1,
-          abortSignal: controller.signal,
-          system: GENERATION_SYSTEM_PROMPT,
-          prompt: basePrompt,
-          schema: generatedItinerarySchema,
-        });
-        generated = primary.object;
+          const primary = await generateObjectWithHardTimeout(
+            "primary generation",
+            () =>
+              generateObject({
+                model,
+                maxRetries: 1,
+                abortSignal: controller.signal,
+                system: GENERATION_SYSTEM_PROMPT,
+                prompt: basePrompt,
+                schema: generatedItinerarySchema,
+              }),
+            () => controller.abort(),
+          );
+          generated = primary.object;
       } catch (primaryError) {
         const recoveredFromPrimary = recoverGeneratedItineraryFromError(primaryError);
         if (recoveredFromPrimary) {
@@ -695,14 +721,19 @@ Chosen option: ${JSON.stringify(selectedOptionContext)}
 Destination vendors:\n${vendorContext}`;
 
           try {
-            const fallback = await generateObject({
-              model,
-              maxRetries: 0,
-              abortSignal: controller.signal,
-              system: COMPACT_SYSTEM_PROMPT,
-              prompt: compactPrompt,
-              schema: generatedItinerarySchema,
-            });
+            const fallback = await generateObjectWithHardTimeout(
+              "compact generation",
+              () =>
+                generateObject({
+                  model,
+                  maxRetries: 0,
+                  abortSignal: controller.signal,
+                  system: COMPACT_SYSTEM_PROMPT,
+                  prompt: compactPrompt,
+                  schema: generatedItinerarySchema,
+                }),
+              () => controller.abort(),
+            );
             generated = fallback.object;
           } catch (fallbackError) {
             const recoveredFromFallback = recoverGeneratedItineraryFromError(fallbackError);
@@ -731,14 +762,19 @@ Destination vendors:\n${vendorContext}`;
           const retryPrompt = `${basePrompt}\n\nIMPORTANT QUALITY GUARDRAIL:\n- Never use generic placeholders like \"Aktivitas Day X\" or \"Rencana Aktivitas Day X\".\n- Every title must be specific to a real place, venue, or activity in Indonesia.\n- Every description must mention concrete details for that activity.`;
 
           try {
-            const retry = await generateObject({
-              model,
-              maxRetries: 0,
-              abortSignal: controller.signal,
-              system: GENERATION_SYSTEM_PROMPT,
-              prompt: retryPrompt,
-              schema: generatedItinerarySchema,
-            });
+            const retry = await generateObjectWithHardTimeout(
+              "quality retry generation",
+              () =>
+                generateObject({
+                  model,
+                  maxRetries: 0,
+                  abortSignal: controller.signal,
+                  system: GENERATION_SYSTEM_PROMPT,
+                  prompt: retryPrompt,
+                  schema: generatedItinerarySchema,
+                }),
+              () => controller.abort(),
+            );
 
             generated = retry.object;
           } catch (retryError) {
