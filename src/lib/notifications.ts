@@ -126,13 +126,20 @@ export async function sendTravelYuNotification(payload: TravelYuNotificationPayl
 }
 
 export function scheduleNotification(payload: TravelYuNotificationPayload) {
-  after(async () => {
+  const run = async () => {
     try {
       await sendTravelYuNotification(payload);
     } catch {
       // notification errors must never break request lifecycle
     }
-  });
+  };
+
+  try {
+    after(run);
+  } catch {
+    // Fallback for contexts where `after()` is unavailable
+    void run();
+  }
 }
 
 export async function resolveTripRecipient(tripId: string): Promise<TripRecipient | null> {
