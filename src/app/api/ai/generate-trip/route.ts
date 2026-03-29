@@ -396,6 +396,62 @@ function hasGenericPlaceholderContent(items: Array<{ title: string; description:
   return placeholderCount >= Math.ceil(items.length * 0.35);
 }
 
+function deplaceholderizeGenerated(
+  generated: z.infer<typeof generatedItinerarySchema>,
+): z.infer<typeof generatedItinerarySchema> {
+  const placeholderTitleRegex = /^aktivitas day\s+\d+$/i;
+  const placeholderDescRegex = /^rencana aktivitas day\s+\d+/i;
+  const genericDayRegex = /^day\s+\d+\s+activity$/i;
+
+  const normalizedItems = generated.items.map((item) => {
+    const title = item.title.trim();
+    const description = item.description.trim();
+    const isPlaceholderTitle = placeholderTitleRegex.test(title) || genericDayRegex.test(title);
+    const isPlaceholderDesc = placeholderDescRegex.test(description);
+
+    if (!isPlaceholderTitle && !isPlaceholderDesc) {
+      return item;
+    }
+
+    const location = item.locationAddress?.trim();
+    const activityLabel =
+      item.activityType === "transport"
+        ? "Perjalanan"
+        : item.activityType === "dining"
+          ? "Kuliner"
+          : item.activityType === "accommodation"
+            ? "Check-in Akomodasi"
+            : item.activityType === "attraction"
+              ? "Kunjungan"
+              : item.activityType === "rest"
+                ? "Waktu Istirahat"
+                : "Eksplorasi";
+
+    const safeTitle = isPlaceholderTitle
+      ? location
+        ? `${activityLabel}: ${location}`
+        : `${activityLabel} ${item.timeSlot}`
+      : item.title;
+
+    const safeDescription = isPlaceholderDesc
+      ? location
+        ? `${activityLabel} pada ${item.timeSlot} di ${location} dengan estimasi biaya ${item.estCostIdr.toLocaleString("id-ID")} IDR.`
+        : `${activityLabel} pada ${item.timeSlot} dengan estimasi biaya ${item.estCostIdr.toLocaleString("id-ID")} IDR.`
+      : item.description;
+
+    return {
+      ...item,
+      title: safeTitle,
+      description: safeDescription,
+    };
+  });
+
+  return {
+    ...generated,
+    items: normalizedItems,
+  };
+}
+
 function extractJsonCandidateFromText(text: string): unknown {
   const direct = extractObjectFromText(text);
   if (direct !== null) return direct;
@@ -969,7 +1025,11 @@ ${JSON.stringify(generated)}`;
         }
 
         if (hasGenericPlaceholderContent(generated.items)) {
-          throw new Error("AI returned generic placeholder itinerary content");
+          generated = deplaceholderizeGenerated(generated);
+
+          if (hasGenericPlaceholderContent(generated.items)) {
+            throw new Error("AI returned generic placeholder itinerary content");
+          }
         }
       }
 
