@@ -51,10 +51,32 @@ function getMapLink(item: ItineraryItem) {
   return isMapProviderUrl(bookingUrl) ? bookingUrl : null;
 }
 
+function getActivityLink(item: ItineraryItem) {
+  const bookingUrl = ensureValidHttpUrl(item.booking_url);
+  if (bookingUrl && !isMapProviderUrl(bookingUrl)) return bookingUrl;
+  return null;
+}
+
+function getActivityLinkLabel(item: ItineraryItem) {
+  const text = `${item.title} ${item.description}`.toLowerCase();
+
+  if (
+    item.activity_type === "transport" &&
+    (text.includes("flight") || text.includes("penerbangan") || text.includes("airport") || text.includes("bandara"))
+  ) {
+    return "Website Tiket Penerbangan";
+  }
+
+  if (item.activity_type === "accommodation") return "Website Hotel";
+  if (item.activity_type === "dining") return "Website Restoran";
+  if (item.activity_type === "transport") return "Website Transport";
+  return "Website Aktivitas";
+}
+
 export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
   const pointsWithCoordinates = items
     .filter((item) => item.location_lat !== null && item.location_lng !== null)
-    .slice(0, 12);
+    .slice(0, 18);
 
   const points = items
     .filter((item) => {
@@ -62,7 +84,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       if (item.location_address?.trim()) return true;
       return Boolean(getMapLink(item));
     })
-    .slice(0, 12);
+    .slice(0, 18);
 
   const firstAvailableMapLink = points
     .map((item) => getMapLink(item))
@@ -84,11 +106,17 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
     .map((item) => `${item.location_lng as number},${item.location_lat as number}`)
     .join("|");
 
-  const staticMapUrl =
-    markerParams && mapKey
-      ? `https://api.maptiler.com/maps/streets-v2/static/auto/1200x600@2x.png?key=${encodeURIComponent(mapKey)}&markers=${encodeURIComponent(markerParams)}`
-      : `https://www.openstreetmap.org/export/embed.html?bbox=${centerLng - 0.12}%2C${centerLat - 0.08}%2C${centerLng + 0.12}%2C${centerLat + 0.08}&layer=mapnik`;
+  const staticMapCenter = `${centerLng},${centerLat}`;
+  const staticMapZoom = lats.length > 0 ? 9 : 7;
 
+  const staticMapUrl =
+    mapKey
+      ? markerParams
+        ? `https://api.maptiler.com/maps/streets-v2/static/${encodeURIComponent(staticMapCenter)},${staticMapZoom}/1200x600@2x.png?key=${encodeURIComponent(mapKey)}&markers=${encodeURIComponent(markerParams)}`
+        : `https://api.maptiler.com/maps/streets-v2/static/${encodeURIComponent(staticMapCenter)},${staticMapZoom}/1200x600@2x.png?key=${encodeURIComponent(mapKey)}`
+      : null;
+
+  const openStreetMapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${centerLng - 0.12}%2C${centerLat - 0.08}%2C${centerLng + 0.12}%2C${centerLat + 0.08}&layer=mapnik`;
   const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${centerLat}&mlon=${centerLng}#map=11/${centerLat}/${centerLng}`;
 
   return (
@@ -97,11 +125,11 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-alt)] p-3">
         {points.length > 0 ? (
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
-            {pointsWithCoordinates.length > 0 && markerParams && mapKey ? (
+            {staticMapUrl ? (
               <Image src={staticMapUrl} alt="Trip map overview" width={1200} height={600} className="h-72 w-full object-cover" unoptimized />
             ) : pointsWithCoordinates.length > 0 ? (
               <div className="space-y-2 p-2">
-                <iframe title="Trip map overview" src={staticMapUrl} className="h-72 w-full rounded-lg" loading="lazy" />
+                <iframe title="Trip map overview" src={openStreetMapEmbedUrl} className="h-72 w-full rounded-lg" loading="lazy" />
                 <a
                   href={openStreetMapFallbackLink}
                   target="_blank"
@@ -139,22 +167,39 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
               <div>
                 <p className="font-semibold">{item.title}</p>
                 <p className="text-xs text-[var(--text-soft)]">{item.location_address ?? "Unknown"}</p>
-                {(() => {
-                  const mapsUrl = getMapLink(item);
+                <div className="mt-1 flex flex-wrap gap-3">
+                  {(() => {
+                    const activityLink = getActivityLink(item);
+                    if (!activityLink) return null;
 
-                  if (!mapsUrl) return null;
+                    return (
+                      <a
+                        href={activityLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex text-xs font-semibold text-[var(--brand)] underline-offset-2 hover:underline"
+                      >
+                        {getActivityLinkLabel(item)}
+                      </a>
+                    );
+                  })()}
+                  {(() => {
+                    const mapsUrl = getMapLink(item);
 
-                  return (
-                    <a
-                      href={mapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
-                    >
-                      Lihat di Google Maps
-                    </a>
-                  );
-                })()}
+                    if (!mapsUrl) return null;
+
+                    return (
+                      <a
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
+                      >
+                        Lihat di Google Maps
+                      </a>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
           ))}

@@ -191,7 +191,7 @@ export async function getOrGeneratePackingList(
     const who = String(intakeData.who ?? "");
 
     const { generateText } = await import("ai");
-    const { model } = await import("@/lib/ai/openrouter");
+    const { model } = await import("@/lib/ai/provider");
 
     const { text } = await generateText({
       model,

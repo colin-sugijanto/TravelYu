@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import { revalidateTag } from "next/cache";
 
 import { getCurrentAppUser } from "@/lib/auth";
-import { model } from "@/lib/ai/openrouter";
+import { model } from "@/lib/ai/provider";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(

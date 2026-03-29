@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentAppUser } from "@/lib/auth";
-import { model, hasConfiguredAiProvider } from "@/lib/ai/openrouter";
+import { model, hasConfiguredAiProvider } from "@/lib/ai/provider";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
@@ -35,19 +35,28 @@ function ensureValidHttpUrl(value: string | undefined) {
   }
 }
 
-function fallbackMapsUrl(input: {
+function fallbackWebsiteUrl(input: {
+  activityType: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest";
   title: string;
   locationAddress?: string;
-  locationLat?: number;
-  locationLng?: number;
 }) {
-  if (typeof input.locationLat === "number" && typeof input.locationLng === "number") {
-    return `https://www.google.com/maps?q=${input.locationLat},${input.locationLng}`;
+  const locationQuery = input.locationAddress?.trim() || input.title.trim();
+
+  if (input.activityType === "transport") {
+    const flightHint = `${input.title} ${locationQuery}`.toLowerCase();
+    if (flightHint.includes("flight") || flightHint.includes("penerbangan") || flightHint.includes("airport") || flightHint.includes("bandara")) {
+      return `https://www.google.com/travel/flights?q=${encodeURIComponent(locationQuery || input.title)}`;
+    }
+
+    return `https://www.google.com/search?q=${encodeURIComponent(`${locationQuery} transport booking`)}`;
   }
 
-  const query = input.locationAddress?.trim() || input.title.trim();
-  if (!query) return null;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  if (input.activityType === "accommodation") {
+    return `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(locationQuery || input.title)}`;
+  }
+
+  if (!locationQuery) return null;
+  return `https://www.google.com/search?q=${encodeURIComponent(`${locationQuery} official website`)}`;
 }
 
 type ComparisonSummary = {
@@ -197,7 +206,7 @@ function normalizeRecoveredGeneratedItinerary(input: unknown): z.infer<typeof ge
       rawItem.location_name ??
       rawItem.place ??
       rawItem.venue;
-    const locationAddress =
+    const normalizedLocationAddressRaw =
       typeof locationAddressRaw === "string" && locationAddressRaw.trim().length > 0
         ? locationAddressRaw.trim()
         : undefined;
@@ -214,7 +223,9 @@ function normalizeRecoveredGeneratedItinerary(input: unknown): z.infer<typeof ge
     const title =
       typeof titleRaw === "string" && titleRaw.trim().length > 0
         ? titleRaw.trim()
-        : locationAddress ?? `Day ${day} Activity`;
+        : normalizedLocationAddressRaw ?? `Day ${day} Activity`;
+
+    const locationAddress = normalizedLocationAddressRaw ?? title;
 
     const descriptionRaw = rawItem.description ?? rawItem.notes ?? rawItem.detail ?? rawItem.summary;
     const description =
@@ -363,13 +374,13 @@ function toPersistPayload(
     totalEstCostIdr: generated.totalEstCostIdr,
     items: generated.items.map((item) => ({
       ...item,
+      locationAddress: item.locationAddress?.trim() || item.title,
       bookingUrl:
         ensureValidHttpUrl(item.bookingUrl) ??
-        fallbackMapsUrl({
+        fallbackWebsiteUrl({
+          activityType: item.activityType,
           title: item.title,
-          locationAddress: item.locationAddress,
-          locationLat: item.locationLat,
-          locationLng: item.locationLng,
+          locationAddress: item.locationAddress?.trim() || item.title,
         }) ??
         undefined,
     })),
@@ -501,11 +512,10 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
 
     const rows = input.items.map((item, idx) => {
       const validatedBookingUrl = ensureValidHttpUrl(item.bookingUrl);
-      const fallbackBookingUrl = fallbackMapsUrl({
+      const fallbackBookingUrl = fallbackWebsiteUrl({
+        activityType: item.activityType,
         title: item.title,
         locationAddress: item.locationAddress,
-        locationLat: item.locationLat,
-        locationLng: item.locationLng,
       });
 
       return {
@@ -748,6 +758,8 @@ export async function POST(request: Request) {
 6. Include transport items between locations if they are >2km apart.
 7. Dining items must be included at least twice per day.
 8. Accommodation must be included on day_number 1 with time_slot 'evening'.
+9. bookingUrl MUST be a website/booking page URL (NOT Google Maps links).
+10. locationAddress MUST be populated with specific location text for each item.
 
 ## Indonesian Price Benchmarks (2026)
 - Budget hotel/guesthouse: Rp 200.000–500.000/night

@@ -7,7 +7,7 @@ Stack:
 - Tailwind CSS
 - Clerk (Auth)
 - Supabase (Postgres + Storage + RLS)
-- Vercel AI SDK + OpenRouter
+- Vercel AI SDK + Google AI Studio
 - MapTiler API (map rendering)
 - n8n (Gmail + Evolution API for email + WhatsApp)
 
@@ -39,8 +39,8 @@ Stack:
 Copy `.env.example` to `.env.local` and fill values.
 
 Key variables:
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL` (optional override, default: `stepfun/step-3.5-flash:free`)
+- `GOOGLE_AI_STUDIO_API_KEY`
+- `GOOGLE_AI_STUDIO_MODEL` (optional override, default: `gemini-3.1-flash-lite-preview`)
 - `TRAVELYU_INTERNAL_API_TOKEN`
 - `N8N_NOTIFICATION_WEBHOOK_URL`
 - `N8N_NOTIFICATION_WEBHOOK_TOKEN`

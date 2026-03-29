@@ -18,6 +18,52 @@ interface TimelineProps {
   allowVendorDetails?: boolean;
 }
 
+function ensureValidHttpUrl(value: string | null | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function isMapProviderUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname.toLowerCase();
+
+    if (host.includes("maps.app.goo.gl")) return true;
+    if (host.includes("google.com") && path.includes("/maps")) return true;
+    if (host.includes("openstreetmap.org")) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function getActivityLinkLabel(item: ItineraryItem) {
+  const text = `${item.title} ${item.description}`.toLowerCase();
+
+  if (
+    item.activity_type === "transport" &&
+    (text.includes("flight") || text.includes("penerbangan") || text.includes("airport") || text.includes("bandara"))
+  ) {
+    return "Buka Tiket Penerbangan";
+  }
+
+  if (item.activity_type === "accommodation") return "Buka Website Hotel";
+  if (item.activity_type === "dining") return "Buka Website Restoran";
+  if (item.activity_type === "transport") return "Buka Website Transport";
+  return "Buka Website Lokasi";
+}
+
 function RegenDayButton({ tripId, dayNumber }: { tripId: string; dayNumber: number }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,42 +178,46 @@ export function ItineraryTimeline({
               .sort((a, b) => a.sort_order - b.sort_order)
               .map((item) => (
                 <div key={item.id} className="rounded-xl border border-[var(--border)] bg-white p-3">
+                  {(() => {
+                    const bookingUrl = ensureValidHttpUrl(item.booking_url);
+                    const activityWebsiteUrl = bookingUrl && !isMapProviderUrl(bookingUrl) ? bookingUrl : null;
+                    const mapAddress = item.location_address ?? undefined;
+                    const mapsUrl = createGoogleMapsLink({
+                      lat: item.location_lat,
+                      lng: item.location_lng,
+                      address: mapAddress,
+                      title: item.title,
+                    }) ?? (bookingUrl && isMapProviderUrl(bookingUrl) ? bookingUrl : null);
+
+                    return (
+                      <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold">{item.title}</p>
                     <Badge tone={item.status === "booked_locked" ? "danger" : "brand"}>{item.status.replaceAll("_", " ")}</Badge>
                   </div>
                   <CardText className="mt-1">{item.description}</CardText>
-                  {(item.booking_url || item.location_address || item.location_lat !== null || item.location_lng !== null) ? (
+                  {(activityWebsiteUrl || mapsUrl) ? (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                      {item.booking_url ? (
+                      {activityWebsiteUrl ? (
                         <a
-                          href={item.booking_url}
+                          href={activityWebsiteUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="rounded-full border border-[var(--brand)]/30 bg-[var(--brand-soft)] px-2.5 py-1 font-semibold text-[var(--brand-strong)] hover:opacity-85"
                         >
-                          Buka Link Aktivitas
+                          {getActivityLinkLabel(item)}
                         </a>
                       ) : null}
-                      {(() => {
-                        const mapsUrl = createGoogleMapsLink({
-                          lat: item.location_lat,
-                          lng: item.location_lng,
-                          address: item.location_address,
-                          title: item.title,
-                        });
-                        if (!mapsUrl) return null;
-                        return (
-                          <a
-                            href={mapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100"
-                          >
-                            Lihat di Google Maps
-                          </a>
-                        );
-                      })()}
+                      {mapsUrl ? (
+                        <a
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          Lihat di Google Maps
+                        </a>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="mt-2 flex items-center justify-between text-xs text-[var(--text-soft)]">
@@ -181,6 +231,9 @@ export function ItineraryTimeline({
                     </span>
                     <span>{formatIdr(item.est_cost_idr)}</span>
                   </div>
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
           </div>

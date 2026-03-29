@@ -3,7 +3,7 @@ import { streamText, tool } from "ai";
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
 import { createItineraryTools } from "@/lib/ai/tools";
-import { model } from "@/lib/ai/openrouter";
+import { model } from "@/lib/ai/provider";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { getItineraryItems } from "@/lib/data";
 import { findTripByIdentifier, isTripMember } from "@/lib/trip-access";

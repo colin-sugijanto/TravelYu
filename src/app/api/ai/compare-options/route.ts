@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentAppUser } from "@/lib/auth";
-import { model, hasConfiguredAiProvider } from "@/lib/ai/openrouter";
+import { model, hasConfiguredAiProvider } from "@/lib/ai/provider";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase/admin";
