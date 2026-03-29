@@ -107,6 +107,8 @@ function isGenericHomepageUrl(value: string) {
       "grab.com",
       "google.com",
       "bali.com",
+      "balitourismboard.org",
+      "wonderfulindonesia.com",
       "indonesia.travel",
       "visitbali.com",
     ];
