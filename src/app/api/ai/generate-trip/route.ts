@@ -1,4 +1,4 @@
-import { generateObject } from "ai";
+import { generateObject, generateText } from "ai";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
@@ -359,11 +359,32 @@ function toPersistPayload(
   };
 }
 
-async function generateObjectWithHardTimeout(
+function extractJsonCandidateFromText(text: string): unknown {
+  const direct = extractObjectFromText(text);
+  if (direct !== null) return direct;
+
+  const fencedBlockRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let fencedMatch: RegExpExecArray | null;
+  while ((fencedMatch = fencedBlockRegex.exec(text)) !== null) {
+    const candidate = extractObjectFromText(fencedMatch[1] ?? "");
+    if (candidate !== null) return candidate;
+  }
+
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const candidate = extractObjectFromText(text.slice(firstBrace, lastBrace + 1));
+    if (candidate !== null) return candidate;
+  }
+
+  return null;
+}
+
+async function runWithHardTimeout<T>(
   label: string,
-  run: () => Promise<{ object: z.infer<typeof generatedItinerarySchema> }>,
+  run: () => Promise<T>,
   abort: () => void,
-): Promise<{ object: z.infer<typeof generatedItinerarySchema> }> {
+): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const hardTimeoutPromise = new Promise<never>((_, reject) => {
@@ -590,6 +611,7 @@ export async function POST(request: Request) {
   const vendorContext =
     relevantVendors && relevantVendors.length > 0
       ? relevantVendors
+          .slice(0, 12)
           .map(
             (v) =>
               `[${String(v.type).toUpperCase()}] ${
@@ -677,7 +699,7 @@ For items not in the vendor list, set source='web_search'.
 
       let generated: z.infer<typeof generatedItinerarySchema>;
       try {
-          const primary = await generateObjectWithHardTimeout(
+          const primary = await runWithHardTimeout(
             "primary generation",
             () =>
               generateObject({
@@ -721,7 +743,7 @@ Chosen option: ${JSON.stringify(selectedOptionContext)}
 Destination vendors:\n${vendorContext}`;
 
           try {
-            const fallback = await generateObjectWithHardTimeout(
+            const fallback = await runWithHardTimeout(
               "compact generation",
               () =>
                 generateObject({
@@ -737,14 +759,56 @@ Destination vendors:\n${vendorContext}`;
             generated = fallback.object;
           } catch (fallbackError) {
             const recoveredFromFallback = recoverGeneratedItineraryFromError(fallbackError);
-            if (!recoveredFromFallback) {
-              throw fallbackError;
-            }
+            if (recoveredFromFallback) {
+              console.warn(
+                `[generate-trip] Recovered schema-mismatched compact response for trip ${body.tripId}; proceeding with normalized payload.`,
+              );
+              generated = recoveredFromFallback;
+            } else {
+              console.warn(
+                `[generate-trip] Compact generation failed for trip ${body.tripId}. Retrying with text JSON fallback.`,
+                fallbackError,
+              );
 
-            console.warn(
-              `[generate-trip] Recovered schema-mismatched compact response for trip ${body.tripId}; proceeding with normalized payload.`,
-            );
-            generated = recoveredFromFallback;
+              const textFallbackSystemPrompt = `Generate Indonesian travel itinerary in strict JSON only.
+Rules:
+- Output exactly one JSON object.
+- Top-level keys must be: totalEstCostIdr, items.
+- items is array of objects with keys:
+  day, timeSlot, activityType, title, description, estCostIdr, locationAddress, source.
+- timeSlot must be one of: morning, afternoon, evening, night.
+- activityType must be one of: accommodation, transport, dining, attraction, experience, rest.
+- Use concrete places/activities in Indonesia and realistic 2026 IDR prices.
+- Never use generic placeholders like Aktivitas Day X.`;
+
+              const textFallbackPrompt = `Trip ID: ${body.tripId}
+Intake data: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
+Selected option details: ${JSON.stringify(selectedOptionContext)}
+Target trip duration: ${targetDays} days
+Verified vendors (if available):
+${vendorContext}`;
+
+              const textFallback = await runWithHardTimeout(
+                "text json fallback generation",
+                () =>
+                  generateText({
+                    model,
+                    maxRetries: 0,
+                    abortSignal: controller.signal,
+                    system: textFallbackSystemPrompt,
+                    prompt: textFallbackPrompt,
+                  }),
+                () => controller.abort(),
+              );
+
+              const parsedFromText = extractJsonCandidateFromText(textFallback.text);
+              const normalizedFromText = normalizeRecoveredGeneratedItinerary(parsedFromText);
+              if (!normalizedFromText) {
+                throw fallbackError;
+              }
+
+              generated = normalizedFromText;
+            }
           }
         }
       }
@@ -762,7 +826,7 @@ Destination vendors:\n${vendorContext}`;
           const retryPrompt = `${basePrompt}\n\nIMPORTANT QUALITY GUARDRAIL:\n- Never use generic placeholders like \"Aktivitas Day X\" or \"Rencana Aktivitas Day X\".\n- Every title must be specific to a real place, venue, or activity in Indonesia.\n- Every description must mention concrete details for that activity.`;
 
           try {
-            const retry = await generateObjectWithHardTimeout(
+            const retry = await runWithHardTimeout(
               "quality retry generation",
               () =>
                 generateObject({
