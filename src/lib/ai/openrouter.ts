@@ -106,25 +106,19 @@ const googleAiStudio = createOpenAI({
 
 const modelId = process.env.OPENROUTER_MODEL ?? OPENROUTER_MODEL;
 const googleModelId = process.env.GOOGLE_AI_STUDIO_MODEL ?? "gemini-3.1-flash-lite-preview";
-const googleFallbackModelId = "gemini-2.0-flash-lite";
 
 const hasGoogleAiStudioKey =
   typeof process.env.GOOGLE_AI_STUDIO_API_KEY === "string" &&
   process.env.GOOGLE_AI_STUDIO_API_KEY.trim().length > 0;
 
-const preferredProvider = hasGoogleAiStudioKey ? "google" : "openrouter";
+const useGoogleAiStudio = (process.env.USE_GOOGLE_AI_STUDIO ?? "false").toLowerCase() === "true";
 
-const modelCandidates =
-  preferredProvider === "google"
-    ? [
-        googleAiStudio.chat(googleModelId),
-        ...(googleModelId !== googleFallbackModelId ? [googleAiStudio.chat(googleFallbackModelId)] : []),
-        openrouter.chat(modelId),
-      ]
-    : [openrouter.chat(modelId)];
+const selectedModel =
+  useGoogleAiStudio && hasGoogleAiStudioKey
+    ? googleAiStudio.chat(googleModelId)
+    : openrouter.chat(modelId);
 
 // Force Chat Completions compatibility for OpenRouter providers/models.
 // The default OpenAI provider call path uses Responses API, which can reject
 // multi-turn assistant history for some providers.
-export const model = modelCandidates[0];
-export const modelFallbacks = modelCandidates.slice(1);
+export const model = selectedModel;

@@ -16,7 +16,7 @@ export const maxDuration = 300;
 
 const LOCAL_TIMEOUT_MS = 600_000;
 const VERCEL_TIMEOUT_MS = 240_000;
-const GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS = 35_000;
+const GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS = 60_000;
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
@@ -532,8 +532,17 @@ export async function POST(request: Request) {
     return blocked;
   }
 
-  if (!process.env.OPENROUTER_API_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  const useGoogleAiStudio = (process.env.USE_GOOGLE_AI_STUDIO ?? "false").toLowerCase() === "true";
+  const hasOpenRouter = typeof process.env.OPENROUTER_API_KEY === "string" && process.env.OPENROUTER_API_KEY.trim().length > 0;
+  const hasGoogleAiStudio =
+    typeof process.env.GOOGLE_AI_STUDIO_API_KEY === "string" && process.env.GOOGLE_AI_STUDIO_API_KEY.trim().length > 0;
+
+  if ((!hasOpenRouter && !hasGoogleAiStudio) || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return Response.json({ error: "AI itinerary generation service is not configured" }, { status: 503 });
+  }
+
+  if (useGoogleAiStudio && !hasGoogleAiStudio) {
+    return Response.json({ error: "Google AI Studio is enabled but API key is missing" }, { status: 503 });
   }
 
   let body: { tripId: string; intakeData?: Record<string, unknown>; selectedOption?: number };

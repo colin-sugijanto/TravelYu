@@ -1,6 +1,6 @@
 export const APP_NAME = "TravelYu!";
 
-export const OPENROUTER_MODEL = "gemini-3.1-flash-lite-preview";
+export const OPENROUTER_MODEL = "google/gemini-3.1-flash-lite-preview";
 
 export const INTAKE_FIELDS = [
   "who",
