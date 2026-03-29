@@ -106,6 +106,7 @@ function isGenericHomepageUrl(value: string) {
       "zomato.com",
       "grab.com",
       "google.com",
+      "bali.com",
       "indonesia.travel",
       "visitbali.com",
     ];
