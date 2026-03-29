@@ -57,6 +57,13 @@ type ComparisonSummary = {
   rationale?: string;
 };
 
+type VendorSeed = {
+  name: string;
+  city: string;
+  activityType: (typeof ACTIVITY_TYPES)[number] | null;
+  priceTier: "budget" | "mid" | "premium";
+};
+
 type SaveItineraryResult =
   | { ok: true; itemCount: number }
   | { ok: false; error: string };
@@ -336,6 +343,258 @@ function recoverGeneratedItineraryFromError(error: unknown): z.infer<typeof gene
   return null;
 }
 
+function parseBudgetIdrFromIntake(intakeData: Record<string, unknown>): number | null {
+  const raw = typeof intakeData.budget === "string" ? intakeData.budget.toLowerCase() : "";
+  if (!raw) return null;
+
+  const match = raw.match(/(\d+(?:[.,]\d+)*)\s*(juta|jt|m|ribu|rb|k)?/i);
+  if (!match) return null;
+
+  const parsed = Number(match[1].replace(/[.,](?=\d{3}\b)/g, "").replace(/,/g, "."));
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+
+  const suffix = (match[2] ?? "").toLowerCase();
+  if (suffix === "juta" || suffix === "jt" || suffix === "m") return Math.round(parsed * 1_000_000);
+  if (suffix === "ribu" || suffix === "rb" || suffix === "k") return Math.round(parsed * 1_000);
+  return Math.round(parsed);
+}
+
+function normalizeVendorActivityType(value: unknown): (typeof ACTIVITY_TYPES)[number] | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "hotel" || normalized === "villa" || normalized === "accommodation") return "accommodation";
+  if (normalized === "restaurant" || normalized === "dining" || normalized === "cafe") return "dining";
+  if (normalized === "transport") return "transport";
+  if (normalized === "attraction") return "attraction";
+  if (normalized === "experience" || normalized === "guide") return "experience";
+  return null;
+}
+
+function normalizePriceTier(value: unknown): "budget" | "mid" | "premium" {
+  if (typeof value !== "string") return "mid";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "budget" || normalized === "mid" || normalized === "premium") {
+    return normalized;
+  }
+  return "mid";
+}
+
+function normalizeVendorSeeds(input: unknown): VendorSeed[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((row) => {
+      if (!isRecord(row)) return null;
+      const name = typeof row.name === "string" ? row.name.trim() : "";
+      if (!name) return null;
+      const city = typeof row.city === "string" ? row.city.trim() : "";
+
+      return {
+        name,
+        city,
+        activityType: normalizeVendorActivityType(row.type),
+        priceTier: normalizePriceTier(row.price_tier),
+      } satisfies VendorSeed;
+    })
+    .filter((row): row is VendorSeed => row !== null);
+}
+
+function roundToNearest(value: number, step = 50_000) {
+  return Math.max(0, Math.round(value / step) * step);
+}
+
+function costFromType(
+  activityType: (typeof ACTIVITY_TYPES)[number],
+  priceTier: "budget" | "mid" | "premium",
+  multiplier: number,
+) {
+  const base: Record<(typeof ACTIVITY_TYPES)[number], number> = {
+    accommodation: 900_000,
+    transport: 220_000,
+    dining: 180_000,
+    attraction: 200_000,
+    experience: 350_000,
+    rest: 0,
+  };
+
+  const tierMultiplier = priceTier === "budget" ? 0.85 : priceTier === "premium" ? 1.35 : 1;
+  return roundToNearest(base[activityType] * tierMultiplier * multiplier);
+}
+
+function pickByDay<T>(items: T[], day: number, salt: number): T | null {
+  if (items.length < 1) return null;
+  const index = Math.abs(day * 31 + salt * 17) % items.length;
+  return items[index] ?? null;
+}
+
+function isLowQualityGeneratedItinerary(generated: z.infer<typeof generatedItinerarySchema>): boolean {
+  if (generated.items.length < 1) return true;
+
+  const placeholderTitleRegex = /^aktivitas day\s+\d+$/i;
+  const placeholderDescRegex = /^rencana aktivitas day\s+\d+/i;
+
+  const placeholderCount = generated.items.filter((item) => {
+    const title = item.title.trim();
+    const desc = item.description.trim();
+    return placeholderTitleRegex.test(title) || placeholderDescRegex.test(desc);
+  }).length;
+
+  const meaningfulTitles = new Set(
+    generated.items
+      .map((item) => item.title.trim().toLowerCase())
+      .filter((title) => title.length > 0 && !placeholderTitleRegex.test(title)),
+  );
+
+  const placeholderRatio = placeholderCount / generated.items.length;
+  if (placeholderRatio >= 0.2) return true;
+  if (meaningfulTitles.size < Math.max(4, Math.floor(generated.items.length * 0.35))) return true;
+
+  return false;
+}
+
+function buildReliableFallbackItinerary(input: {
+  targetDays: number;
+  destinationCity: string;
+  intakeData: Record<string, unknown>;
+  selectedOption: ComparisonSummary;
+  vendors: VendorSeed[];
+}): z.infer<typeof generatedItinerarySchema> {
+  const targetDays = Math.max(2, Math.min(10, Math.floor(input.targetDays)));
+  const destination = input.destinationCity || "Bali";
+
+  const optionMultiplier = input.selectedOption.title?.toLowerCase().includes("premium")
+    ? 1.2
+    : input.selectedOption.title?.toLowerCase().includes("budget")
+      ? 0.85
+      : 1;
+
+  const budgetFromOption =
+    typeof input.selectedOption.estimatedBudgetIdr === "number" && Number.isFinite(input.selectedOption.estimatedBudgetIdr)
+      ? input.selectedOption.estimatedBudgetIdr
+      : null;
+  const budgetFromIntake = parseBudgetIdrFromIntake(input.intakeData);
+  const targetBudget = budgetFromOption ?? budgetFromIntake;
+
+  const baselineDaily = 1_700_000;
+  const budgetScale = targetBudget
+    ? Math.max(0.65, Math.min(1.45, targetBudget / Math.max(targetDays * baselineDaily, 1)))
+    : 1;
+
+  const multiplier = optionMultiplier * budgetScale;
+
+  const accommodationPool = input.vendors.filter((v) => v.activityType === "accommodation");
+  const diningPool = input.vendors.filter((v) => v.activityType === "dining");
+  const experiencePool = input.vendors.filter((v) => v.activityType === "experience" || v.activityType === "attraction");
+
+  const items: z.infer<typeof generatedItinerarySchema>["items"] = [];
+
+  for (let day = 1; day <= targetDays; day += 1) {
+    const breakfastSpot = pickByDay(diningPool, day, 1);
+    items.push({
+      day,
+      timeSlot: "morning",
+      activityType: "dining",
+      title: breakfastSpot ? `Sarapan di ${breakfastSpot.name}` : `Sarapan lokal khas ${destination}`,
+      description: breakfastSpot
+        ? `Mulai hari dengan sarapan santai di ${breakfastSpot.name} sebelum eksplorasi.`
+        : `Nikmati sarapan lokal untuk energi sebelum aktivitas utama.`,
+      estCostIdr: costFromType("dining", breakfastSpot?.priceTier ?? "mid", multiplier),
+      locationAddress: breakfastSpot?.city || destination,
+      source: breakfastSpot ? "internal_db" : "web_search",
+    });
+
+    if (day === 1) {
+      items.push({
+        day,
+        timeSlot: "afternoon",
+        activityType: "transport",
+        title: `Transfer kedatangan menuju area ${destination}`,
+        description: `Perjalanan dari titik kedatangan ke akomodasi dengan rute paling efisien.`,
+        estCostIdr: costFromType("transport", "mid", multiplier),
+        locationAddress: destination,
+        source: "web_search",
+      });
+    } else if (day === targetDays) {
+      items.push({
+        day,
+        timeSlot: "afternoon",
+        activityType: "transport",
+        title: `Transfer pulang dari ${destination}`,
+        description: `Persiapan check-out dan transfer menuju titik keberangkatan.`,
+        estCostIdr: costFromType("transport", "mid", multiplier),
+        locationAddress: destination,
+        source: "web_search",
+      });
+    } else {
+      const spot = pickByDay(experiencePool, day, 3);
+      const activityType = spot?.activityType === "attraction" ? "attraction" : "experience";
+      items.push({
+        day,
+        timeSlot: "afternoon",
+        activityType,
+        title: spot ? `Eksplor ${spot.name}` : `Eksplorasi budaya & hidden gem ${destination}`,
+        description: spot
+          ? `Sesi eksplorasi utama hari ini di ${spot.name} dengan ritme santai.`
+          : `Kunjungi area ikonik dan spot lokal non-turis untuk pengalaman autentik.`,
+        estCostIdr: costFromType(activityType, spot?.priceTier ?? "mid", multiplier),
+        locationAddress: spot?.city || destination,
+        source: spot ? "internal_db" : "web_search",
+      });
+    }
+
+    if (day === 1) {
+      const stay = pickByDay(accommodationPool, day, 5);
+      items.push({
+        day,
+        timeSlot: "evening",
+        activityType: "accommodation",
+        title: stay ? `Check-in ${stay.name}` : `Check-in akomodasi nyaman di ${destination}`,
+        description: stay
+          ? `Check-in dan istirahat sejenak di ${stay.name} sebelum aktivitas malam.`
+          : `Check-in di akomodasi terpilih dengan akses mudah ke pusat aktivitas.`,
+        estCostIdr: costFromType("accommodation", stay?.priceTier ?? "mid", multiplier),
+        locationAddress: stay?.city || destination,
+        source: stay ? "internal_db" : "web_search",
+      });
+    } else {
+      const dinnerSpot = pickByDay(diningPool, day, 7);
+      items.push({
+        day,
+        timeSlot: "evening",
+        activityType: "dining",
+        title: dinnerSpot ? `Makan malam di ${dinnerSpot.name}` : `Makan malam khas ${destination}`,
+        description: dinnerSpot
+          ? `Penutup hari dengan kuliner lokal di ${dinnerSpot.name}.`
+          : `Cicipi menu khas daerah sebagai penutup hari eksplorasi.`,
+        estCostIdr: costFromType("dining", dinnerSpot?.priceTier ?? "mid", multiplier * 1.1),
+        locationAddress: dinnerSpot?.city || destination,
+        source: dinnerSpot ? "internal_db" : "web_search",
+      });
+    }
+
+    items.push({
+      day,
+      timeSlot: "night",
+      activityType: "rest",
+      title: `Istirahat malam di ${destination}`,
+      description:
+        day === targetDays
+          ? "Waktu istirahat setelah aktivitas terakhir sebelum kembali pulang."
+          : "Istirahat untuk recovery sebelum melanjutkan itinerary esok hari.",
+      estCostIdr: 0,
+      locationAddress: destination,
+      source: "web_search",
+    });
+  }
+
+  const totalEstCostIdr = items.reduce((sum, item) => sum + item.estCostIdr, 0);
+  return {
+    totalEstCostIdr,
+    items,
+  };
+}
+
 function toPersistPayload(
   tripId: string,
   generated: z.infer<typeof generatedItinerarySchema>,
@@ -566,6 +825,8 @@ export async function POST(request: Request) {
         .limit(30)
     : { data: null };
 
+  const normalizedVendors = normalizeVendorSeeds(relevantVendors);
+
   const vendorContext =
     relevantVendors && relevantVendors.length > 0
       ? relevantVendors
@@ -718,6 +979,19 @@ Destination vendors:\n${vendorContext}`;
         }
       }
 
+      if (isLowQualityGeneratedItinerary(generated)) {
+        console.warn(
+          `[generate-trip] Low-quality schema recovery detected for trip ${body.tripId}. Switching to deterministic fallback itinerary builder.`,
+        );
+        generated = buildReliableFallbackItinerary({
+          targetDays,
+          destinationCity,
+          intakeData,
+          selectedOption: selectedSummary,
+          vendors: normalizedVendors,
+        });
+      }
+
       saveItineraryResult = await persistGeneratedItinerary(toPersistPayload(body.tripId, generated));
       console.log(
         `[generate-trip] Generation completed for trip ${body.tripId}, result: ${saveItineraryResult?.ok ? "success" : "failed"}`,
@@ -797,6 +1071,35 @@ Destination vendors:\n${vendorContext}`;
     });
   } catch (error) {
     console.error("[generate-trip] Error during generation:", error);
+
+    const fallbackGenerated = buildReliableFallbackItinerary({
+      targetDays: inferTripDaysForPrompt(intakeData),
+      destinationCity,
+      intakeData,
+      selectedOption: selectedSummary,
+      vendors: normalizedVendors,
+    });
+
+    const fallbackSaveResult = await persistGeneratedItinerary(toPersistPayload(body.tripId, fallbackGenerated));
+    if (fallbackSaveResult.ok && fallbackSaveResult.itemCount > 0) {
+      const recipient = await resolveTripRecipient(body.tripId);
+      if (recipient) {
+        scheduleNotification({
+          eventType: "itinerary_ready",
+          tripId: recipient.tripId,
+          userName: recipient.userName,
+          email: recipient.email,
+          phoneE164: recipient.phoneE164,
+          channelPreference: "both",
+        });
+      }
+
+      return Response.json({
+        ok: true,
+        fallback: true,
+        message: "Itinerary generated successfully",
+      });
+    }
 
     const isRateLimited = isRateLimitedError(error);
     const isTimeout = error instanceof Error && error.name === "AbortError" && !isRateLimited;
