@@ -2,7 +2,7 @@ import { streamText } from "ai";
 
 import { getCurrentAppUser } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
-import { model } from "@/lib/ai/provider";
+import { model } from "@/lib/ai/openrouter";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 
 const INTAKE_SYSTEM_PROMPT = `

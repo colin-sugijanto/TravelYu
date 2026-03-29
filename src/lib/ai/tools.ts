@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
-import { model } from "@/lib/ai/provider";
+import { model } from "@/lib/ai/openrouter";
 import { searchIndonesiaPlaces } from "@/lib/ai/tavily";
 import { normalizePhoneToE164, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";

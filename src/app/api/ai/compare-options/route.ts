@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentAppUser } from "@/lib/auth";
-import { model, hasConfiguredAiProvider } from "@/lib/ai/provider";
+import { model, hasConfiguredOpenRouter } from "@/lib/ai/openrouter";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
     return blocked;
   }
 
-  if (!hasConfiguredAiProvider || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!hasConfiguredOpenRouter || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return Response.json({ error: "AI compare options service is not configured" }, { status: 503 });
   }
 
