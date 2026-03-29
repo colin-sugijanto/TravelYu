@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentAppUser } from "@/lib/auth";
-import { model } from "@/lib/ai/openrouter";
+import { model, hasConfiguredAiProvider } from "@/lib/ai/openrouter";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
@@ -588,17 +588,8 @@ export async function POST(request: Request) {
     return blocked;
   }
 
-  const useGoogleAiStudio = (process.env.USE_GOOGLE_AI_STUDIO ?? "false").toLowerCase() === "true";
-  const hasOpenRouter = typeof process.env.OPENROUTER_API_KEY === "string" && process.env.OPENROUTER_API_KEY.trim().length > 0;
-  const hasGoogleAiStudio =
-    typeof process.env.GOOGLE_AI_STUDIO_API_KEY === "string" && process.env.GOOGLE_AI_STUDIO_API_KEY.trim().length > 0;
-
-  if ((!hasOpenRouter && !hasGoogleAiStudio) || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!hasConfiguredAiProvider || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return Response.json({ error: "AI itinerary generation service is not configured" }, { status: 503 });
-  }
-
-  if (useGoogleAiStudio && !hasGoogleAiStudio) {
-    return Response.json({ error: "Google AI Studio is enabled but API key is missing" }, { status: 503 });
   }
 
   let body: { tripId: string; intakeData?: Record<string, unknown>; selectedOption?: number };

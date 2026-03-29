@@ -99,24 +99,31 @@ export const openrouter = createOpenAI({
   fetch: fetchWithDevGuardrailRelaxation,
 });
 
+const googleAiStudioApiKey =
+  process.env.GOOGLE_AI_STUDIO_API_KEY ?? "AIzaSyCbuhHlyFWFO3SNFLySehqCNHh97ZH7mEs";
+
 const googleAiStudio = createOpenAI({
   baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-  apiKey: process.env.GOOGLE_AI_STUDIO_API_KEY,
+  apiKey: googleAiStudioApiKey,
 });
 
 const modelId = process.env.OPENROUTER_MODEL ?? OPENROUTER_MODEL;
 const googleModelId = process.env.GOOGLE_AI_STUDIO_MODEL ?? "gemini-3.1-flash-lite-preview";
 
-const hasGoogleAiStudioKey =
-  typeof process.env.GOOGLE_AI_STUDIO_API_KEY === "string" &&
-  process.env.GOOGLE_AI_STUDIO_API_KEY.trim().length > 0;
+const hasOpenRouterKey =
+  typeof process.env.OPENROUTER_API_KEY === "string" &&
+  process.env.OPENROUTER_API_KEY.trim().length > 0;
 
-const useGoogleAiStudio = (process.env.USE_GOOGLE_AI_STUDIO ?? "false").toLowerCase() === "true";
+const hasGoogleAiStudioKey = googleAiStudioApiKey.trim().length > 0;
+
+const useGoogleAiStudio = (process.env.USE_GOOGLE_AI_STUDIO ?? "true").toLowerCase() === "true";
 
 const selectedModel =
   useGoogleAiStudio && hasGoogleAiStudioKey
     ? googleAiStudio.chat(googleModelId)
     : openrouter.chat(modelId);
+
+export const hasConfiguredAiProvider = hasOpenRouterKey || hasGoogleAiStudioKey;
 
 // Force Chat Completions compatibility for OpenRouter providers/models.
 // The default OpenAI provider call path uses Responses API, which can reject
