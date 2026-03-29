@@ -1,6 +1,6 @@
 export const APP_NAME = "TravelYu!";
 
-export const OPENROUTER_MODEL = "stepfun/step-3.5-flash:free";
+export const OPENROUTER_MODEL = "gemini-3.1-flash-lite-preview";
 
 export const INTAKE_FIELDS = [
   "who",

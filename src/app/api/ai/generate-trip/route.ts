@@ -16,7 +16,7 @@ export const maxDuration = 300;
 
 const LOCAL_TIMEOUT_MS = 600_000;
 const VERCEL_TIMEOUT_MS = 240_000;
-const GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS = 90_000;
+const GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS = 35_000;
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
