@@ -41,22 +41,101 @@ function fallbackWebsiteUrl(input: {
   locationAddress?: string;
 }) {
   const locationQuery = input.locationAddress?.trim() || input.title.trim();
+  const titleQuery = input.title.trim();
+
+  const encodedTitle = encodeURIComponent(titleQuery || locationQuery);
+  const encodedLocation = encodeURIComponent(locationQuery || titleQuery);
 
   if (input.activityType === "transport") {
     const flightHint = `${input.title} ${locationQuery}`.toLowerCase();
-    if (flightHint.includes("flight") || flightHint.includes("penerbangan") || flightHint.includes("airport") || flightHint.includes("bandara")) {
-      return `https://www.google.com/travel/flights?q=${encodeURIComponent(locationQuery || input.title)}`;
+    if (
+      flightHint.includes("flight") ||
+      flightHint.includes("penerbangan") ||
+      flightHint.includes("airport") ||
+      flightHint.includes("bandara")
+    ) {
+      return `https://www.google.com/travel/flights?q=${encodedTitle}`;
     }
 
-    return `https://www.google.com/search?q=${encodeURIComponent(`${locationQuery} transport booking`)}`;
+    return `https://www.rome2rio.com/s/${encodedLocation}`;
   }
 
   if (input.activityType === "accommodation") {
-    return `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(locationQuery || input.title)}`;
+    return `https://www.booking.com/searchresults.html?ss=${encodedLocation}`;
+  }
+
+  if (input.activityType === "dining") {
+    return `https://www.google.com/search?q=${encodeURIComponent(`${titleQuery} ${locationQuery} restaurant`)}`;
+  }
+
+  if (input.activityType === "attraction" || input.activityType === "experience") {
+    return `https://www.google.com/search?q=${encodeURIComponent(`${titleQuery} ${locationQuery} official site`)}`;
   }
 
   if (!locationQuery) return null;
-  return `https://www.google.com/search?q=${encodeURIComponent(`${locationQuery} official website`)}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(`${titleQuery} ${locationQuery}`)}`;
+}
+
+function isMapProviderUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (host.includes("maps.app.goo.gl")) return true;
+    if (host.includes("google.com") && path.includes("/maps")) return true;
+    if (host.includes("openstreetmap.org")) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function isGenericHomepageUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname;
+    const hasSearch = parsed.searchParams.toString().length > 0;
+
+    const genericHosts = [
+      "traveloka.com",
+      "booking.com",
+      "tripadvisor.com",
+      "zomato.com",
+      "grab.com",
+      "google.com",
+      "indonesia.travel",
+      "visitbali.com",
+    ];
+
+    const rootLikePath = path === "/" || path === "";
+    const hostIsGeneric = genericHosts.some((item) => host === item || host.endsWith(`.${item}`));
+
+    return hostIsGeneric && rootLikePath && !hasSearch;
+  } catch {
+    return false;
+  }
+}
+
+function buildSpecificWebsiteUrl(input: {
+  activityType: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest";
+  title: string;
+  locationAddress?: string;
+  bookingUrl?: string;
+}) {
+  const validated = ensureValidHttpUrl(input.bookingUrl);
+
+  if (validated && !isMapProviderUrl(validated) && !isGenericHomepageUrl(validated)) {
+    return validated;
+  }
+
+  return fallbackWebsiteUrl({
+    activityType: input.activityType,
+    title: input.title,
+    locationAddress: input.locationAddress,
+  });
 }
 
 type ComparisonSummary = {
@@ -376,13 +455,12 @@ function toPersistPayload(
       ...item,
       locationAddress: item.locationAddress?.trim() || item.title,
       bookingUrl:
-        ensureValidHttpUrl(item.bookingUrl) ??
-        fallbackWebsiteUrl({
+        buildSpecificWebsiteUrl({
           activityType: item.activityType,
           title: item.title,
           locationAddress: item.locationAddress?.trim() || item.title,
-        }) ??
-        undefined,
+          bookingUrl: item.bookingUrl,
+        }) ?? undefined,
     })),
   };
 }
@@ -511,11 +589,11 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
     await supabaseAdmin.from("itinerary_items").delete().eq("trip_id", input.tripId);
 
     const rows = input.items.map((item, idx) => {
-      const validatedBookingUrl = ensureValidHttpUrl(item.bookingUrl);
-      const fallbackBookingUrl = fallbackWebsiteUrl({
+      const resolvedBookingUrl = buildSpecificWebsiteUrl({
         activityType: item.activityType,
         title: item.title,
         locationAddress: item.locationAddress,
+        bookingUrl: item.bookingUrl,
       });
 
       return {
@@ -530,7 +608,7 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
       location_address: item.locationAddress ?? null,
       location_lat: typeof item.locationLat === "number" ? item.locationLat : null,
       location_lng: typeof item.locationLng === "number" ? item.locationLng : null,
-      booking_url: validatedBookingUrl ?? fallbackBookingUrl,
+      booking_url: resolvedBookingUrl,
       status: "draft",
       source: item.source,
       };
@@ -760,6 +838,7 @@ export async function POST(request: Request) {
 8. Accommodation must be included on day_number 1 with time_slot 'evening'.
 9. bookingUrl MUST be a website/booking page URL (NOT Google Maps links).
 10. locationAddress MUST be populated with specific location text for each item.
+11. bookingUrl SHOULD point to a specific provider page (hotel/flight/restaurant), not a generic homepage.
 
 ## Indonesian Price Benchmarks (2026)
 - Budget hotel/guesthouse: Rp 200.000–500.000/night

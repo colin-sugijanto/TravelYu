@@ -60,12 +60,14 @@ export function createGoogleMapsLink(input: {
 }) {
   const { lat, lng, address, title } = input;
 
+  const query = address?.trim() || title?.trim();
+  if (query) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  }
+
   if (typeof lat === "number" && typeof lng === "number") {
     return `https://www.google.com/maps?q=${lat},${lng}`;
   }
 
-  const query = address?.trim() || title?.trim();
-  if (!query) return null;
-
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  return null;
 }
