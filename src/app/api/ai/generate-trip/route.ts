@@ -919,6 +919,47 @@ ${vendorContext}`;
         }
 
         if (hasGenericPlaceholderContent(generated.items)) {
+          const rewriteSystemPrompt = `You are refining a generated itinerary JSON.
+Rewrite ONLY generic placeholder titles/descriptions into specific, realistic Indonesia trip activities.
+
+Hard constraints:
+- Return one JSON object with keys: totalEstCostIdr, items.
+- Keep each item's day, timeSlot, activityType, estCostIdr, and location fields intact when possible.
+- Replace placeholders such as "Aktivitas Day X", "Rencana Aktivitas Day X", "Day X Activity".
+- Use concrete places/activities and concise natural descriptions.
+- No markdown, no prose, JSON only.`;
+
+          const rewritePrompt = `Trip ID: ${body.tripId}
+Context: ${JSON.stringify(selectedOptionContext)}
+Duration: ${targetDays} days
+
+Current generated itinerary JSON:
+${JSON.stringify(generated)}`;
+
+          try {
+            const rewritten = await runWithHardTimeout(
+              "placeholder rewrite generation",
+              () =>
+                generateObject({
+                  model,
+                  maxRetries: 0,
+                  abortSignal: controller.signal,
+                  system: rewriteSystemPrompt,
+                  prompt: rewritePrompt,
+                  schema: generatedItinerarySchema,
+                }),
+              () => controller.abort(),
+            );
+
+            if (!hasGenericPlaceholderContent(rewritten.object.items)) {
+              generated = rewritten.object;
+            }
+          } catch {
+            // Final guardrail below will handle unresolved placeholder output.
+          }
+        }
+
+        if (hasGenericPlaceholderContent(generated.items)) {
           throw new Error("AI returned generic placeholder itinerary content");
         }
       }
