@@ -189,24 +189,41 @@ function normalizeRecoveredGeneratedItinerary(input: unknown): z.infer<typeof ge
       normalizeActivityType(rawItem.activityType ?? rawItem.activity_type ?? rawItem.type) ??
       (timeSlot === "night" ? "rest" : "experience");
 
-    const titleRaw = rawItem.title ?? rawItem.name ?? rawItem.activity;
-    const title = typeof titleRaw === "string" && titleRaw.trim().length > 0 ? titleRaw.trim() : `Aktivitas Day ${day}`;
-
-    const descriptionRaw = rawItem.description ?? rawItem.notes;
-    const description =
-      typeof descriptionRaw === "string" && descriptionRaw.trim().length > 0
-        ? descriptionRaw.trim()
-        : `Rencana ${title}`;
-
-    const estCostRaw = toNumber(rawItem.estCostIdr ?? rawItem.est_cost_idr ?? rawItem.estimated_cost_idr);
-    const estCostIdr = Math.max(0, Math.floor(estCostRaw ?? 0));
-
     const locationAddressRaw =
-      rawItem.locationAddress ?? rawItem.location_address ?? rawItem.address ?? rawItem.vendor_name;
+      rawItem.locationAddress ??
+      rawItem.location_address ??
+      rawItem.address ??
+      rawItem.vendor_name ??
+      rawItem.location_name ??
+      rawItem.place ??
+      rawItem.venue;
     const locationAddress =
       typeof locationAddressRaw === "string" && locationAddressRaw.trim().length > 0
         ? locationAddressRaw.trim()
         : undefined;
+
+    const titleRaw =
+      rawItem.title ??
+      rawItem.name ??
+      rawItem.activity ??
+      rawItem.activity_name ??
+      rawItem.activityTitle ??
+      rawItem.place ??
+      rawItem.venue ??
+      rawItem.location_name;
+    const title =
+      typeof titleRaw === "string" && titleRaw.trim().length > 0
+        ? titleRaw.trim()
+        : locationAddress ?? `Day ${day} Activity`;
+
+    const descriptionRaw = rawItem.description ?? rawItem.notes ?? rawItem.detail ?? rawItem.summary;
+    const description =
+      typeof descriptionRaw === "string" && descriptionRaw.trim().length > 0
+        ? descriptionRaw.trim()
+        : `Aktivitas terjadwal: ${title}`;
+
+    const estCostRaw = toNumber(rawItem.estCostIdr ?? rawItem.est_cost_idr ?? rawItem.estimated_cost_idr);
+    const estCostIdr = Math.max(0, Math.floor(estCostRaw ?? 0));
 
     const locationLatRaw = toNumber(rawItem.locationLat ?? rawItem.location_lat ?? rawItem.lat ?? rawItem.latitude);
     const locationLngRaw = toNumber(rawItem.locationLng ?? rawItem.location_lng ?? rawItem.lng ?? rawItem.longitude);
@@ -357,6 +374,26 @@ function toPersistPayload(
         undefined,
     })),
   };
+}
+
+function hasGenericPlaceholderContent(items: Array<{ title: string; description: string }>): boolean {
+  if (items.length < 1) return true;
+
+  const placeholderTitleRegex = /^aktivitas day\s+\d+$/i;
+  const placeholderDescRegex = /^rencana aktivitas day\s+\d+/i;
+  const genericDayRegex = /^day\s+\d+\s+activity$/i;
+
+  const placeholderCount = items.filter((item) => {
+    const title = item.title.trim();
+    const description = item.description.trim();
+    return (
+      placeholderTitleRegex.test(title) ||
+      placeholderDescRegex.test(description) ||
+      genericDayRegex.test(title)
+    );
+  }).length;
+
+  return placeholderCount >= Math.ceil(items.length * 0.35);
 }
 
 function extractJsonCandidateFromText(text: string): unknown {
@@ -814,15 +851,7 @@ ${vendorContext}`;
       }
 
       if (generated.items.length > 0) {
-        const placeholderTitleRegex = /^aktivitas day\s+\d+$/i;
-        const placeholderDescRegex = /^rencana aktivitas day\s+\d+/i;
-        const placeholderCount = generated.items.filter((item) => {
-          const title = item.title.trim();
-          const description = item.description.trim();
-          return placeholderTitleRegex.test(title) || placeholderDescRegex.test(description);
-        }).length;
-
-        if (placeholderCount > 0) {
+        if (hasGenericPlaceholderContent(generated.items)) {
           const retryPrompt = `${basePrompt}\n\nIMPORTANT QUALITY GUARDRAIL:\n- Never use generic placeholders like \"Aktivitas Day X\" or \"Rencana Aktivitas Day X\".\n- Every title must be specific to a real place, venue, or activity in Indonesia.\n- Every description must mention concrete details for that activity.`;
 
           try {
@@ -843,10 +872,54 @@ ${vendorContext}`;
             generated = retry.object;
           } catch (retryError) {
             const recoveredRetry = recoverGeneratedItineraryFromError(retryError);
-            if (recoveredRetry) {
+            if (recoveredRetry && !hasGenericPlaceholderContent(recoveredRetry.items)) {
               generated = recoveredRetry;
             }
           }
+        }
+
+        if (hasGenericPlaceholderContent(generated.items)) {
+          const textRegenerationSystemPrompt = `Generate Indonesian travel itinerary in strict JSON only.
+Rules:
+- Output exactly one JSON object.
+- Top-level keys: totalEstCostIdr, items.
+- Items must include concrete places/activities in Indonesia; no placeholders.
+- Forbidden patterns in title/description: "Aktivitas Day", "Rencana Aktivitas Day", "Day X Activity".
+- Keep realistic 2026 IDR pricing and practical sequencing.`;
+
+          const textRegenerationPrompt = `Trip ID: ${body.tripId}
+Intake data: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
+Selected option details: ${JSON.stringify(selectedOptionContext)}
+Target trip duration: ${targetDays} days
+Verified vendors:
+${vendorContext}`;
+
+          try {
+            const textRetry = await runWithHardTimeout(
+              "placeholder text regeneration",
+              () =>
+                generateText({
+                  model,
+                  maxRetries: 0,
+                  abortSignal: controller.signal,
+                  system: textRegenerationSystemPrompt,
+                  prompt: textRegenerationPrompt,
+                }),
+              () => controller.abort(),
+            );
+
+            const parsedRetryText = extractJsonCandidateFromText(textRetry.text);
+            const normalizedRetryText = normalizeRecoveredGeneratedItinerary(parsedRetryText);
+            if (normalizedRetryText && !hasGenericPlaceholderContent(normalizedRetryText.items)) {
+              generated = normalizedRetryText;
+            }
+          } catch {
+            // Fall through to final guardrail below.
+          }
+        }
+
+        if (hasGenericPlaceholderContent(generated.items)) {
+          throw new Error("AI returned generic placeholder itinerary content");
         }
       }
 
