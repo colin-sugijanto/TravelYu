@@ -1,21 +1,9 @@
-import { after } from "next/server";
-
 import { revalidateTag } from "next/cache";
 import { getCurrentAppUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { POST as generateTripHandler } from "@/app/api/ai/generate-trip/route";
 
 export const maxDuration = 300;
-
-async function markTripStatus(
-  tripId: string,
-  status: "intake" | "generating" | "approved" | "draft",
-) {
-  await supabaseAdmin
-    .from("trips")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", tripId);
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -45,55 +33,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Pilih salah satu opsi comparison dulu sebelum generate itinerary." }, { status: 400 });
   }
 
-  // Update trip status to 'generating' immediately
-  const { error: updateError } = await supabaseAdmin
-    .from("trips")
-    .update({ status: "generating" })
-    .eq("id", id);
-
-  if (updateError) {
-    console.error("Failed to update trip status to generating:", updateError);
-    return Response.json({ error: "Failed to update trip status" }, { status: 500 });
-  }
-
-  // Revalidate the trip tag so the client can see the status change
-  revalidateTag(`trip:${trip.id}`, "max");
-
-  after(async () => {
-    try {
-      const internalRequest = new Request(
-        new URL("/api/ai/generate-trip", request.url),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(request.headers.get("cookie") ? { cookie: request.headers.get("cookie") as string } : {}),
-          },
-          body: JSON.stringify({
-            tripId: trip.id,
-            intakeData: trip.intake_data,
-            selectedOption,
-          }),
-        },
-      );
-
-      const response = await generateTripHandler(internalRequest);
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        console.error(`Background AI generation returned non-OK for trip ${trip.id}:`, payload);
-
-        await markTripStatus(trip.id, "intake");
-      }
-    } catch (error) {
-      console.error(`Error during background AI generation for trip ${trip.id}:`, error);
-      await markTripStatus(trip.id, "intake");
-    } finally {
-      revalidateTag(`trip:${trip.id}`, "max");
-      revalidateTag(`trip:${trip.id}:items`, "max");
-      revalidateTag("admin:metrics", "max");
-    }
+  const internalRequest = new Request(new URL("/api/ai/generate-trip", request.url), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(request.headers.get("cookie") ? { cookie: request.headers.get("cookie") as string } : {}),
+    },
+    body: JSON.stringify({
+      tripId: trip.id,
+      intakeData: trip.intake_data,
+      selectedOption,
+    }),
   });
 
-  return Response.json({ ok: true, status: "generating" }, { status: 202 });
+  const response = await generateTripHandler(internalRequest);
+
+  revalidateTag(`trip:${trip.id}`, "max");
+  revalidateTag(`trip:${trip.id}:items`, "max");
+  revalidateTag("admin:metrics", "max");
+
+  return response;
 }
