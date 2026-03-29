@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { GOOGLE_AI_STUDIO_MODEL } from "@/lib/constants";
+import { GOOGLE_AI_STUDIO_MODEL, OPENROUTER_CHAT_MODEL } from "@/lib/constants";
 
 const googleAiStudioApiKey = process.env.GOOGLE_AI_STUDIO_API_KEY;
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -15,7 +15,8 @@ const openrouter = createOpenAI({
 });
 
 const googleModelId = process.env.GOOGLE_AI_STUDIO_MODEL ?? GOOGLE_AI_STUDIO_MODEL;
-const openRouterGenerationModel = process.env.OPENROUTER_GENERATION_MODEL ?? `google/${googleModelId}`;
+const openRouterGenerationModel =
+  process.env.OPENROUTER_GENERATION_MODEL ?? process.env.OPENROUTER_MODEL ?? OPENROUTER_CHAT_MODEL;
 
 const hasGoogleAiStudioKey =
   typeof googleAiStudioApiKey === "string" && googleAiStudioApiKey.trim().length > 0;
