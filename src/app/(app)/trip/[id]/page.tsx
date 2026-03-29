@@ -325,9 +325,14 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
       {/* Draft state — show itinerary in read-only mode */}
       {trip.status === "draft" && (
         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] opacity-75">
-          <Suspense fallback={<TimelineSkeleton />}>
-            <TimelineSection tripId={trip.id} />
-          </Suspense>
+          <div className="space-y-4">
+            <Suspense fallback={<TimelineSkeleton />}>
+              <TimelineSection tripId={trip.id} />
+            </Suspense>
+            <Suspense fallback={<PanelSkeleton />}>
+              <MapSection tripId={trip.id} />
+            </Suspense>
+          </div>
           <Suspense fallback={<PanelSkeleton />}>
             <BudgetSection tripId={trip.id} totalBudget={totalBudget} />
           </Suspense>
