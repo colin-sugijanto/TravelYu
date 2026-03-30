@@ -20,6 +20,90 @@ import { redirect } from "next/navigation";
 import { ArrowRight, Clock, MapPin, MessageSquare, RefreshCw } from "lucide-react";
 import { RefreshButton } from "@/components/trip/refresh-button";
 
+const LOCATION_NOISE_RE = /^(jl\.?|jalan|street|st\.?|no\.?|rt\/?rw|kec\.?|kel\.?|hotel|villa|resort|airport|bandara|terminal|station|stasiun|pelabuhan)\b/i;
+const LOCATION_BLACKLIST = new Set(["indonesia", "id", "ri"]);
+
+function cleanCityToken(value: string | null | undefined) {
+  if (!value) return null;
+
+  const cleaned = value
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(kota|kabupaten|city|provinsi)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return null;
+  if (/\d/.test(cleaned)) return null;
+  if (LOCATION_NOISE_RE.test(cleaned)) return null;
+
+  const lower = cleaned.toLowerCase();
+  if (LOCATION_BLACKLIST.has(lower)) return null;
+
+  return cleaned;
+}
+
+function parseDestinationCity(where: string | null | undefined) {
+  if (!where) return null;
+
+  const normalized = where
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return null;
+
+  const routeMatch = /.+\bto\b\s+(.+)/i.exec(normalized);
+  const target = (routeMatch?.[1] ?? normalized).trim();
+
+  const commaParts = target
+    .split(",")
+    .map((part) => cleanCityToken(part))
+    .filter((part): part is string => Boolean(part));
+
+  if (commaParts.length > 0) return commaParts[0];
+
+  const head = target.split(/[|/;\-]/)[0]?.trim() ?? "";
+  const cleanedHead = cleanCityToken(head);
+  if (cleanedHead) {
+    const words = cleanedHead.split(/\s+/).filter(Boolean);
+    if (words.length > 0) return words.slice(0, 3).join(" ");
+  }
+
+  return null;
+}
+
+function parseCityFromAddress(address: string | null | undefined) {
+  if (!address) return null;
+
+  const parts = address
+    .split(",")
+    .map((part) => cleanCityToken(part))
+    .filter((part): part is string => Boolean(part));
+
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const candidate = parts[index];
+    if (!candidate) continue;
+    return candidate;
+  }
+
+  return cleanCityToken(address);
+}
+
+async function getWeatherCity(tripId: string, where: string | null | undefined) {
+  const fromIntake = parseDestinationCity(where);
+  if (fromIntake) return fromIntake;
+
+  const items = await getItineraryItems(tripId);
+  for (const item of items) {
+    const fromAddress = parseCityFromAddress(item.location_address);
+    if (fromAddress) return fromAddress;
+
+    const fromTitle = parseDestinationCity(item.title);
+    if (fromTitle) return fromTitle;
+  }
+
+  return "Indonesia";
+}
+
 async function TimelineSection({
   tripId,
   canRegen,
@@ -131,8 +215,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
   const isWorkspaceReady = trip.status === "approved" || trip.status === "active" || trip.status === "completed";
   const statusInfo = STATUS_INFO[trip.status];
 
-  // Destination for weather (extract first word of where field)
-  const destinationCity = trip.intake_data?.where?.split(/[,\s]/)[0] ?? "Bali";
+  const destinationCity = await getWeatherCity(trip.id, trip.intake_data?.where);
   const totalBudget = trip.total_est_cost_idr ?? 15000000;
 
   return (
