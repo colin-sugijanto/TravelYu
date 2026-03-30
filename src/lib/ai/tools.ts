@@ -46,7 +46,9 @@ export function createItineraryTools(context: ItineraryToolContext) {
     update_itinerary_item: {
     description: "Update minor editable fields for draft/booked_flexible itinerary item by itemId or by day/title match",
     inputSchema: z.object({
-      itemId: z.string().optional(),
+      itemId: z.string().optional().refine((val) => !val || (val !== "undefined" && val !== "null" && val.trim().length > 0), {
+        message: "itemId must be a valid UUID or omitted",
+      }),
       dayNumber: z.number().int().min(1).optional(),
       currentTitle: z.string().min(1).optional(),
       title: z.string().optional(),
@@ -116,7 +118,7 @@ export function createItineraryTools(context: ItineraryToolContext) {
           ...(input.tips ? { tips: input.tips } : {}),
           ...(input.timeSlot ? { time_slot: input.timeSlot } : {}),
         })
-        .eq("id", input.itemId);
+        .eq("id", item.id);
 
       if (error) {
         return { ok: false, error: error.message };
