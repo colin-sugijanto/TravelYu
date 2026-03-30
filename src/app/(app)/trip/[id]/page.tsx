@@ -22,13 +22,15 @@ import { RefreshButton } from "@/components/trip/refresh-button";
 
 const LOCATION_NOISE_RE = /^(jl\.?|jalan|street|st\.?|no\.?|rt\/?rw|kec\.?|kel\.?|hotel|villa|resort|airport|bandara|terminal|station|stasiun|pelabuhan)\b/i;
 const LOCATION_BLACKLIST = new Set(["indonesia", "id", "ri"]);
+const ADDRESS_NOISE_RE = /airport|bandara|international|international airport|stasiun|terminal|pelabuhan|harbour|harbor|port\b/i;
+
 
 function cleanCityToken(value: string | null | undefined) {
   if (!value) return null;
 
   const cleaned = value
     .replace(/\([^)]*\)/g, " ")
-    .replace(/\b(kota|kabupaten|city|provinsi)\b/gi, " ")
+    .replace(/\b(kota|kabupaten|city|provinsi|kota administrasi)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -40,6 +42,11 @@ function cleanCityToken(value: string | null | undefined) {
   if (LOCATION_BLACKLIST.has(lower)) return null;
 
   return cleaned;
+}
+
+function isLocationNoise(value: string | null | undefined) {
+  if (!value) return true;
+  return ADDRESS_NOISE_RE.test(value);
 }
 
 function parseDestinationCity(where: string | null | undefined) {
@@ -61,9 +68,10 @@ function parseDestinationCity(where: string | null | undefined) {
 
   if (commaParts.length > 0) return commaParts[0];
 
-  const head = target.split(/[|/;\-]/)[0]?.trim() ?? "";
+  const separators = /[|/;\-]/;
+  const head = target.split(separators)[0]?.trim() ?? "";
   const cleanedHead = cleanCityToken(head);
-  if (cleanedHead) {
+  if (cleanedHead && !isLocationNoise(cleanedHead)) {
     const words = cleanedHead.split(/\s+/).filter(Boolean);
     if (words.length > 0) return words.slice(0, 3).join(" ");
   }
@@ -74,18 +82,23 @@ function parseDestinationCity(where: string | null | undefined) {
 function parseCityFromAddress(address: string | null | undefined) {
   if (!address) return null;
 
+  if (ADDRESS_NOISE_RE.test(address)) return null;
+
   const parts = address
     .split(",")
     .map((part) => cleanCityToken(part))
     .filter((part): part is string => Boolean(part));
 
+  if (parts.length <= 1) return null;
+
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const candidate = parts[index];
     if (!candidate) continue;
+    if (isLocationNoise(candidate)) continue;
     return candidate;
   }
 
-  return cleanCityToken(address);
+  return null;
 }
 
 async function getWeatherCity(tripId: string, where: string | null | undefined) {
