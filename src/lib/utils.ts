@@ -60,13 +60,31 @@ export function createGoogleMapsLink(input: {
 }) {
   const { lat, lng, address, title } = input;
 
-  const query = address?.trim() || title?.trim();
-  if (query) {
+  const normalizedTitle =
+    title
+      ?.trim()
+      .replace(/^hidden\s+gem:\s*/i, "")
+      .replace(/^(lunch|dinner|breakfast|brunch|meal)\s+at\s+/i, "")
+      .replace(/^(check-?in|check in|stay)\s+at\s+/i, "")
+      .replace(/^(sunset\s+dining|dining)\s+at\s+/i, "")
+      .replace(/^(relax|explore|exploration|visit)\s+at\s+/i, "")
+      .trim() || "";
+  const normalizedAddress = address?.trim() || "";
+
+  const queryCandidates = [
+    normalizedTitle && normalizedAddress ? `${normalizedTitle}, ${normalizedAddress}` : "",
+    normalizedTitle,
+    normalizedAddress,
+  ];
+
+  for (const candidate of queryCandidates) {
+    const query = candidate.trim();
+    if (!query) continue;
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   }
 
   if (typeof lat === "number" && typeof lng === "number") {
-    return `https://www.google.com/maps?q=${lat},${lng}`;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`;
   }
 
   return null;

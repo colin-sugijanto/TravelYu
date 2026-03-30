@@ -1,4 +1,5 @@
-import Image from "next/image";
+"use client";
+
 import { MapPin } from "lucide-react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
@@ -100,22 +101,6 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
 
   const centerLat = (minLat + maxLat) / 2;
   const centerLng = (minLng + maxLng) / 2;
-  const mapKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
-
-  const markerParams = pointsWithCoordinates
-    .map((item) => `${item.location_lng as number},${item.location_lat as number}`)
-    .join("|");
-
-  const staticMapCenter = `${centerLng},${centerLat}`;
-  const staticMapZoom = lats.length > 0 ? 9 : 7;
-
-  const staticMapUrl =
-    mapKey
-      ? markerParams
-        ? `https://api.maptiler.com/maps/streets-v2/static/${encodeURIComponent(staticMapCenter)},${staticMapZoom}/1200x600@2x.png?key=${encodeURIComponent(mapKey)}&markers=${encodeURIComponent(markerParams)}`
-        : `https://api.maptiler.com/maps/streets-v2/static/${encodeURIComponent(staticMapCenter)},${staticMapZoom}/1200x600@2x.png?key=${encodeURIComponent(mapKey)}`
-      : null;
-
   const openStreetMapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${centerLng - 0.12}%2C${centerLat - 0.08}%2C${centerLng + 0.12}%2C${centerLat + 0.08}&layer=mapnik`;
   const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${centerLat}&mlon=${centerLng}#map=11/${centerLat}/${centerLng}`;
 
@@ -125,9 +110,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-alt)] p-3">
         {points.length > 0 ? (
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
-            {staticMapUrl ? (
-              <Image src={staticMapUrl} alt="Trip map overview" width={1200} height={600} className="h-72 w-full object-cover" unoptimized />
-            ) : pointsWithCoordinates.length > 0 ? (
+            {pointsWithCoordinates.length > 0 ? (
               <div className="space-y-2 p-2">
                 <iframe title="Trip map overview" src={openStreetMapEmbedUrl} className="h-72 w-full rounded-lg" loading="lazy" />
                 <a

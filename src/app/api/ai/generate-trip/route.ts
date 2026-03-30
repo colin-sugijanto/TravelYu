@@ -35,16 +35,118 @@ function ensureValidHttpUrl(value: string | undefined) {
   }
 }
 
+function normalizeQueryPart(value: string | undefined) {
+  if (!value) return "";
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function inferPlaceName(title: string) {
+  const cleaned = normalizeQueryPart(title)
+    .replace(/^hidden\s+gem:\s*/i, "")
+    .replace(/^(lunch|dinner|breakfast|brunch|meal)\s+at\s+/i, "")
+    .replace(/^(check-?in|check in|stay)\s+at\s+/i, "")
+    .replace(/^(sunset\s+dining|dining)\s+at\s+/i, "")
+    .replace(/^(relax|explore|exploration|visit|transfer|departure|arrival)\s+(at|to)\s+/i, "")
+    .replace(/^(flight\s+arrival\s+and\s+airport\s+transfer)\s*/i, "airport transfer")
+    .trim();
+
+  return cleaned || normalizeQueryPart(title);
+}
+
+function inferRouteText(title: string, locationAddress?: string) {
+  const titleNormalized = normalizeQueryPart(title);
+  const addressNormalized = normalizeQueryPart(locationAddress);
+
+  const titleRoute = /(.+?)\s+to\s+(.+)/i.exec(titleNormalized)?.[0];
+  if (titleRoute) return titleRoute;
+
+  const addressRoute = /(.+?)\s+to\s+(.+)/i.exec(addressNormalized)?.[0];
+  if (addressRoute) return addressRoute;
+
+  return normalizeQueryPart([inferPlaceName(title), addressNormalized].filter(Boolean).join(" "));
+}
+
+function buildGoogleSearchUrl(parts: Array<string | undefined>) {
+  const query = normalizeQueryPart(parts.filter(Boolean).join(" "));
+  if (!query) return null;
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+function tokenizeForRelevance(parts: Array<string | undefined>) {
+  const stopWords = new Set([
+    "the",
+    "and",
+    "with",
+    "from",
+    "into",
+    "at",
+    "to",
+    "for",
+    "in",
+    "jalan",
+    "jl",
+    "street",
+    "no",
+    "hotel",
+    "restaurant",
+    "restoran",
+    "official",
+    "site",
+    "tickets",
+    "tour",
+    "trip",
+  ]);
+
+  const tokens = parts
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 4 && !stopWords.has(value));
+
+  return Array.from(new Set(tokens));
+}
+
+function isLikelyRelevantUrl(value: string, title: string, locationAddress?: string) {
+  try {
+    const parsed = new URL(value);
+    const haystack = `${parsed.hostname}${parsed.pathname}`.toLowerCase();
+
+    const entityTokens = tokenizeForRelevance([inferPlaceName(title), locationAddress]);
+    if (entityTokens.length < 1) return true;
+
+    return entityTokens.some((token) => haystack.includes(token));
+  } catch {
+    return false;
+  }
+}
+
+function isSearchResultsUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (host.includes("google.") && path === "/search") return true;
+    if (host.includes("bing.com") && path === "/search") return true;
+    if (host.includes("duckduckgo.com") && (path === "/" || path === "/html")) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function fallbackWebsiteUrl(input: {
   activityType: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest";
   title: string;
   locationAddress?: string;
 }) {
-  const locationQuery = input.locationAddress?.trim() || input.title.trim();
-  const titleQuery = input.title.trim();
-
-  const encodedTitle = encodeURIComponent(titleQuery || locationQuery);
-  const encodedLocation = encodeURIComponent(locationQuery || titleQuery);
+  const placeName = inferPlaceName(input.title);
+  const locationQuery = normalizeQueryPart(input.locationAddress) || placeName;
+  const encodedLocation = encodeURIComponent(locationQuery || placeName);
 
   if (input.activityType === "transport") {
     const flightHint = `${input.title} ${locationQuery}`.toLowerCase();
@@ -54,26 +156,36 @@ function fallbackWebsiteUrl(input: {
       flightHint.includes("airport") ||
       flightHint.includes("bandara")
     ) {
-      return `https://www.google.com/travel/flights?q=${encodedTitle}`;
+      const flightQuery = inferRouteText(input.title, input.locationAddress);
+      return `https://www.google.com/travel/flights?q=${encodeURIComponent(flightQuery || locationQuery)}`;
     }
 
-    return `https://www.rome2rio.com/s/${encodedLocation}`;
+    const routeQuery = inferRouteText(input.title, input.locationAddress);
+    if (routeQuery.toLowerCase().includes(" to ")) {
+      return `https://www.rome2rio.com/s/${encodeURIComponent(routeQuery)}`;
+    }
+
+    return buildGoogleSearchUrl([placeName, locationQuery, "transport"]) ?? `https://www.rome2rio.com/s/${encodedLocation}`;
   }
 
   if (input.activityType === "accommodation") {
-    return `https://www.booking.com/searchresults.html?ss=${encodedLocation}`;
+    return `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(`${placeName} ${locationQuery}`.trim())}`;
   }
 
   if (input.activityType === "dining") {
-    return `https://www.google.com/search?q=${encodeURIComponent(`${titleQuery} ${locationQuery} restaurant`)}`;
+    return buildGoogleSearchUrl([placeName, locationQuery, "restaurant menu"]);
   }
 
   if (input.activityType === "attraction" || input.activityType === "experience") {
-    return `https://www.google.com/search?q=${encodeURIComponent(`${titleQuery} ${locationQuery} official site`)}`;
+    return buildGoogleSearchUrl([placeName, locationQuery, "official site tickets"]);
+  }
+
+  if (input.activityType === "rest") {
+    return null;
   }
 
   if (!locationQuery) return null;
-  return `https://www.google.com/search?q=${encodeURIComponent(`${titleQuery} ${locationQuery}`)}`;
+  return buildGoogleSearchUrl([placeName, locationQuery]);
 }
 
 function isMapProviderUrl(value: string) {
@@ -102,6 +214,10 @@ function isGenericHomepageUrl(value: string) {
     const genericHosts = [
       "traveloka.com",
       "booking.com",
+      "agoda.com",
+      "expedia.com",
+      "airbnb.com",
+      "klook.com",
       "tripadvisor.com",
       "zomato.com",
       "grab.com",
@@ -127,10 +243,17 @@ function buildSpecificWebsiteUrl(input: {
   title: string;
   locationAddress?: string;
   bookingUrl?: string;
+  source?: "internal_db" | "web_search" | "provider_api" | "manual_cs";
 }) {
   const validated = ensureValidHttpUrl(input.bookingUrl);
 
-  if (validated && !isMapProviderUrl(validated) && !isGenericHomepageUrl(validated)) {
+  if (
+    validated &&
+    !isMapProviderUrl(validated) &&
+    !isGenericHomepageUrl(validated) &&
+    !isSearchResultsUrl(validated) &&
+    (input.source !== "web_search" || isLikelyRelevantUrl(validated, input.title, input.locationAddress))
+  ) {
     return validated;
   }
 
@@ -463,6 +586,7 @@ function toPersistPayload(
           title: item.title,
           locationAddress: item.locationAddress?.trim() || item.title,
           bookingUrl: item.bookingUrl,
+          source: item.source,
         }) ?? undefined,
     })),
   };
@@ -597,6 +721,7 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
         title: item.title,
         locationAddress: item.locationAddress,
         bookingUrl: item.bookingUrl,
+        source: item.source,
       });
 
       return {
