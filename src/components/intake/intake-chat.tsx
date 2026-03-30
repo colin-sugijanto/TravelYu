@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INTAKE_FIELDS } from "@/lib/constants";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 
 const INTAKE_COMPLETE_TOKEN = "[INTAKE_COMPLETE]";
 
@@ -213,8 +213,48 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   const [compareError, setCompareError] = useState<string | null>(null);
   const [serverIntakeComplete, setServerIntakeComplete] = useState(false);
   const autoAdvanceTriggeredRef = useRef(false);
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [chatLoaded, setChatLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history?type=intake`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = (await res.json()) as { messages?: UIMessage[] };
+        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+          setInitialMessages(data.messages as UIMessage[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setChatLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  const saveMessages = useCallback(
+    async (msgs: UIMessage[]) => {
+      try {
+        await fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "intake",
+            messages: msgs.map((m) => ({ id: m.id, role: m.role, parts: m.parts })),
+          }),
+        });
+      } catch {
+        // non-blocking
+      }
+    },
+    [tripId],
+  );
 
   const { messages, sendMessage, status } = useChat({
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: "/api/ai/intake",
       body: {
@@ -222,6 +262,9 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
         mode,
       },
     }),
+    onFinish: ({ messages: msgs }) => {
+      void saveMessages(msgs);
+    },
   });
 
   const normalizedMessages = normalizeMessages(
@@ -390,6 +433,22 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     autoAdvanceTriggeredRef.current = true;
     void generateOptions();
   }, [generateOptions, isIntakeCompleted, isLoading]);
+
+  if (!chatLoaded) {
+    return (
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
+          <CardTitle>AI Intake Agent</CardTitle>
+          <div className="mt-4 h-[380px] flex items-center justify-center">
+            <p className="text-sm text-[var(--text-soft)]">Memuat riwayat chat...</p>
+          </div>
+        </Card>
+        <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
+          <CardTitle>Progres Parameter</CardTitle>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">

@@ -1,9 +1,9 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 
 import { Card, CardTitle } from "@/components/ui/card";
 
@@ -205,13 +205,54 @@ export function EditorChat({
 }) {
   const router = useRouter();
   const [input, setInput] = useState("");
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history?type=editor`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = (await res.json()) as { messages?: UIMessage[] };
+        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+          setInitialMessages(data.messages as UIMessage[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  const saveMessages = useCallback(
+    async (msgs: UIMessage[]) => {
+      try {
+        await fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "editor",
+            messages: msgs.map((m) => ({ id: m.id, role: m.role, parts: m.parts })),
+          }),
+        });
+      } catch {
+        // non-blocking
+      }
+    },
+    [tripId],
+  );
+
   const { messages, sendMessage, status } = useChat({
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: "/api/ai/editor",
       body: { tripId },
     }),
-    onFinish: () => {
-      // Refresh after AI finishes to sync timeline & budget tracker
+    onFinish: ({ messages: msgs }) => {
+      void saveMessages(msgs);
       router.refresh();
     },
   });
@@ -224,6 +265,17 @@ export function EditorChat({
     setInput("");
     await sendMessage({ text });
   };
+
+  if (!loaded) {
+    return (
+      <Card className="flex h-[540px] flex-col p-4">
+        <CardTitle>AI Editor</CardTitle>
+        <div className="mt-3 flex-1 flex items-center justify-center">
+          <p className="text-sm text-[var(--text-soft)]">Memuat riwayat chat...</p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex h-[540px] flex-col p-4">
