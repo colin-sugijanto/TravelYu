@@ -11,7 +11,17 @@ type StoredMessage = {
 const PERSISTED_PART_TYPES = new Set(["text", "tool-invocation", "tool-call", "tool-result"]);
 
 function sanitizeParts(parts: Array<{ type: string; [key: string]: unknown }>) {
-  return parts.filter((part) => PERSISTED_PART_TYPES.has(part.type));
+  return parts.filter((part) => {
+    if (!part || typeof part.type !== "string") return false;
+    return PERSISTED_PART_TYPES.has(part.type) || part.type.startsWith("tool-");
+  });
+}
+
+function hasRenderableParts(parts: Array<{ type: string; text?: string; [key: string]: unknown }>) {
+  return parts.some((part) => {
+    if (part.type !== "text") return true;
+    return typeof part.text === "string" && part.text.trim().length > 0;
+  });
 }
 
 const VALID_TYPES = new Set(["editor", "intake"]);
@@ -54,10 +64,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const intakeData = (trip.intake_data ?? {}) as Record<string, unknown>;
   const rawMessages = (intakeData[storageKey(type)] as StoredMessage[] | undefined) ?? [];
-  const messages = rawMessages.map((m) => ({
-    ...m,
-    parts: sanitizeParts(m.parts as Array<{ type: string; [key: string]: unknown }>),
-  }));
+  const messages = rawMessages
+    .map((m) => {
+      const parts = sanitizeParts(m.parts as Array<{ type: string; [key: string]: unknown }>);
+      return { ...m, parts };
+    })
+    .filter((m) => hasRenderableParts(m.parts));
 
   return Response.json({ messages });
 }
@@ -79,10 +91,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const type = body.type!;
-  const messages = body.messages.slice(-50).map((m) => ({
-    ...m,
-    parts: sanitizeParts(m.parts as Array<{ type: string; [key: string]: unknown }>),
-  }));
+  const messages = body.messages
+    .slice(-50)
+    .map((m) => {
+      const parts = sanitizeParts(m.parts as Array<{ type: string; [key: string]: unknown }>);
+      return { ...m, parts };
+    })
+    .filter((m) => hasRenderableParts(m.parts));
 
   const trip = await resolveAccessibleTrip(id, appUser.id);
   if (!trip) {
