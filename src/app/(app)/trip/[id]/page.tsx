@@ -23,6 +23,7 @@ import { RefreshButton } from "@/components/trip/refresh-button";
 const LOCATION_NOISE_RE = /^(jl\.?|jalan|street|st\.?|no\.?|rt\/?rw|kec\.?|kel\.?|hotel|villa|resort|airport|bandara|terminal|station|stasiun|pelabuhan)\b/i;
 const LOCATION_BLACKLIST = new Set(["indonesia", "id", "ri"]);
 const ADDRESS_NOISE_RE = /airport|bandara|international|international airport|stasiun|terminal|pelabuhan|harbour|harbor|port\b/i;
+const TITLE_NOISE_RE = /^(arrival|departure|check-?in|check-?out|transfer|hidden gem|explore|visit|relax)\b/i;
 
 
 function cleanCityToken(value: string | null | undefined) {
@@ -71,7 +72,7 @@ function parseDestinationCity(where: string | null | undefined) {
   const separators = /[|/;\-]/;
   const head = target.split(separators)[0]?.trim() ?? "";
   const cleanedHead = cleanCityToken(head);
-  if (cleanedHead && !isLocationNoise(cleanedHead)) {
+  if (cleanedHead && !isLocationNoise(cleanedHead) && !TITLE_NOISE_RE.test(cleanedHead)) {
     const words = cleanedHead.split(/\s+/).filter(Boolean);
     if (words.length > 0) return words.slice(0, 3).join(" ");
   }
@@ -101,6 +102,16 @@ function parseCityFromAddress(address: string | null | undefined) {
   return null;
 }
 
+function stripTitleNoise(value: string | null | undefined) {
+  if (!value) return null;
+  const stripped = value
+    .replace(TITLE_NOISE_RE, "")
+    .replace(/^(in|at|to|from|di|ke|dari|pada)\s+/i, "")
+    .replace(/^[\s:–—-]+/, "")
+    .trim();
+  return stripped.length > 0 ? stripped : null;
+}
+
 async function getWeatherCity(tripId: string, where: string | null | undefined) {
   const fromIntake = parseDestinationCity(where);
   if (fromIntake) return fromIntake;
@@ -110,7 +121,8 @@ async function getWeatherCity(tripId: string, where: string | null | undefined) 
     const fromAddress = parseCityFromAddress(item.location_address);
     if (fromAddress) return fromAddress;
 
-    const fromTitle = parseDestinationCity(item.title);
+    const strippedTitle = stripTitleNoise(item.title);
+    const fromTitle = parseDestinationCity(strippedTitle);
     if (fromTitle) return fromTitle;
   }
 
