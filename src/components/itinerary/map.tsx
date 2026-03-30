@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { MapPin } from "lucide-react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
@@ -143,6 +144,8 @@ function getActivityLinkLabel(item: ItineraryItem) {
 }
 
 export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+
   const pointsWithCoordinates = items
     .filter((item) => item.location_lat !== null && item.location_lng !== null)
     .slice(0, 18);
@@ -194,14 +197,21 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
                       );
 
                       return (
-                        <span
+                        <button
+                          type="button"
                           key={item.id}
-                          title={item.title}
-                          className="absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-red-500 text-[10px] font-bold text-white shadow"
+                          aria-label={`Sorot ${item.title}`}
+                          title={`Pin ${index + 1}: ${item.title}`}
+                          onClick={() => setSelectedPointId(item.id)}
+                          className={`pointer-events-auto absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow transition ${
+                            selectedPointId === item.id
+                              ? "z-20 scale-110 bg-[var(--brand-blue-strong)]"
+                              : "bg-red-500 hover:scale-105"
+                          }`}
                           style={{ left: `${x}%`, top: `${y}%` }}
                         >
                           {index + 1}
-                        </span>
+                        </button>
                       );
                     })}
                   </div>
@@ -214,7 +224,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
                 >
                   Buka peta penuh di OpenStreetMap (zoom {mapZoom})
                 </a>
-                <p className="text-[11px] text-[var(--text-soft)]">Pin bernomor mengikuti urutan lokasi di daftar di bawah.</p>
+                <p className="text-[11px] text-[var(--text-soft)]">Klik pin bernomor untuk menyorot lokasi pada daftar di bawah.</p>
               </div>
             ) : (
               <div className="flex h-72 flex-col items-center justify-center gap-2 px-5 text-center">
@@ -239,7 +249,12 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
 
         <div className="mt-3 grid gap-2">
           {points.map((item) => (
-            <div key={item.id} className="flex items-start gap-2 rounded-lg bg-white px-3 py-2 text-sm">
+            <div
+              key={item.id}
+              className={`flex items-start gap-2 rounded-lg bg-white px-3 py-2 text-sm transition ${
+                selectedPointId === item.id ? "ring-2 ring-[var(--brand-blue-strong)]" : ""
+              }`}
+            >
               <MapPin className="mt-0.5 h-4 w-4 text-[var(--brand)]" />
               <div>
                 <p className="font-semibold">{item.title}</p>
