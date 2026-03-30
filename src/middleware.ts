@@ -10,7 +10,6 @@ const isPublicRoute = createRouteMatcher([
   "/trip/s/(.*)",
   "/memory/s/(.*)",
   "/api/notifications/trip-event",
-  "/api/cron/trip-reminders",
   "/manifest.json",
   "/favicon.ico",
   "/logo.png",
