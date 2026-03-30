@@ -17,6 +17,7 @@ type TravelYuEventType =
 export interface TravelYuNotificationPayload {
   eventType: TravelYuEventType;
   tripId?: string | null;
+  tripPublicId?: string | null;
   userName?: string | null;
   email?: string | null;
   phoneE164?: string | null;
@@ -28,6 +29,7 @@ export interface TravelYuNotificationPayload {
 
 interface TripRecipient {
   tripId: string;
+  tripPublicId: string | null;
   userName: string | null;
   email: string | null;
   phoneE164: string | null;
@@ -94,6 +96,8 @@ export async function sendTravelYuNotification(payload: TravelYuNotificationPayl
   const body = {
     event_type: payload.eventType,
     trip_id: payload.tripId ?? null,
+    trip_public_id: payload.tripPublicId ?? null,
+    app_base_url: process.env.NEXT_PUBLIC_APP_URL ?? "https://travelyu.vercel.app",
     user_name: payload.userName ?? "Traveler",
     email: payload.email ?? null,
     phone_e164: payload.phoneE164 ?? null,
@@ -143,10 +147,10 @@ export function scheduleNotification(payload: TravelYuNotificationPayload) {
 }
 
 export async function resolveTripRecipient(tripId: string): Promise<TripRecipient | null> {
-  let tripQuery = await supabaseAdmin.from("trips").select("id,user_id").eq("id", tripId).maybeSingle();
+  let tripQuery = await supabaseAdmin.from("trips").select("id,public_id,user_id").eq("id", tripId).maybeSingle();
 
   if (!tripQuery.data) {
-    tripQuery = await supabaseAdmin.from("trips").select("id,user_id").eq("public_id", tripId).maybeSingle();
+    tripQuery = await supabaseAdmin.from("trips").select("id,public_id,user_id").eq("public_id", tripId).maybeSingle();
   }
 
   const trip = tripQuery.data;
@@ -166,6 +170,7 @@ export async function resolveTripRecipient(tripId: string): Promise<TripRecipien
 
   return {
     tripId: trip.id as string,
+    tripPublicId: (trip.public_id as string | null | undefined) ?? null,
     userName,
     email,
     phoneE164,

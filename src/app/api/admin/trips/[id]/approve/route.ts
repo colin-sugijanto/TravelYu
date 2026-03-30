@@ -58,7 +58,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (recipient) {
     scheduleNotification({
       eventType: "itinerary_ready",
-      tripId: id,
+      tripId: recipient.tripId,
+      tripPublicId: recipient.tripPublicId,
       userName: recipient.userName,
       email: recipient.email,
       phoneE164: recipient.phoneE164,

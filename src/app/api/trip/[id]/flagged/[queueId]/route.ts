@@ -124,6 +124,7 @@ export async function PATCH(
       scheduleNotification({
         eventType: "cs_approved",
         tripId: recipient.tripId,
+        tripPublicId: recipient.tripPublicId,
         userName: recipient.userName,
         email: recipient.email,
         phoneE164: recipient.phoneE164,

@@ -38,6 +38,13 @@ export const travelYuNotificationWorkflow = {
             { name: "phone_e164", value: "={{$json.body.phone_e164 || $json.phone_e164}}", type: "string" },
             { name: "user_name", value: "={{$json.body.user_name || $json.user_name || 'Traveler'}}", type: "string" },
             { name: "trip_id", value: "={{$json.body.trip_id || $json.trip_id}}", type: "string" },
+            { name: "trip_public_id", value: "={{$json.body.trip_public_id || $json.trip_public_id}}", type: "string" },
+            {
+              name: "trip_link",
+              value:
+                "={{ (() => { const direct = String($json.body?.trip_link ?? $json.trip_link ?? '').trim(); if (direct) return direct; let base = String($json.body?.app_base_url ?? $json.app_base_url ?? 'https://travelyu.vercel.app').trim(); while (base.endsWith('/')) base = base.slice(0, -1); const publicId = String($json.body?.trip_public_id ?? $json.trip_public_id ?? '').trim(); const id = String($json.body?.trip_id ?? $json.trip_id ?? '').trim(); if (publicId) return base + '/trip/s/' + encodeURIComponent(publicId); if (id) return base + '/trip/' + encodeURIComponent(id); return base; })() }}",
+              type: "string",
+            },
             { name: "subject_override", value: "={{$json.body.subject || $json.subject || ''}}", type: "string" },
             { name: "email_text_override", value: "={{$json.body.email_text || $json.email_text || ''}}", type: "string" },
             { name: "wa_text_override", value: "={{$json.body.wa_text || $json.wa_text || ''}}", type: "string" },
@@ -78,8 +85,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'Your itinerary is ready'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || ('Hi ' + $json.user_name + ', your itinerary for trip ' + $json.trip_id + ' is ready.')}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || ('Hi ' + $json.user_name + ', itinerary trip ' + $json.trip_id + ' sudah siap.')}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Hi ' + $json.user_name + ', your itinerary is ready. View detail: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Hi ' + $json.user_name + ', itinerary kamu sudah siap. Lihat detail: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -95,8 +102,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'CS approved your request'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || ('Perubahan itinerary untuk trip ' + $json.trip_id + ' sudah disetujui CS.')}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || ('Permintaan perubahan trip ' + $json.trip_id + ' sudah disetujui CS.')}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Perubahan itinerary kamu sudah disetujui CS. Cek detail: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Permintaan perubahan trip kamu sudah disetujui CS. Detail: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -112,8 +119,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'Trip reminder H-1'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || ('Reminder: trip ' + $json.trip_id + ' mulai besok. Jangan lupa packing list.')}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || ('Reminder H-1 untuk trip ' + $json.trip_id + '. Cek packing list ya.')}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Reminder: trip kamu mulai besok. Cek detail dan packing list di: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Reminder H-1 untuk trip kamu. Cek detail di: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -129,8 +136,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'TravelYu Vendor Message'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || $json.wa_text_override || 'TravelYu update'}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || $json.email_text_override || 'TravelYu update'}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || $json.wa_text_override || ('TravelYu update. Lihat detail: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || $json.email_text_override || ('TravelYu update. Detail: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -146,8 +153,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'Bagaimana perjalananmu?'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', trip kamu sudah selesai! Yuk tulis ulasan dan dapatkan 50 poin untuk tiap ulasan vendor.')}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || ('Halo ' + $json.user_name + '! Trip sudah selesai 🎉 Jangan lupa tulis ulasan untuk mendapat poin rewards ya!')}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', trip kamu sudah selesai! Yuk tulis ulasan dan dapatkan poin rewards. Buka: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Halo ' + $json.user_name + '! Trip sudah selesai 🎉 Jangan lupa tulis ulasan. Link: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -163,8 +170,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'Trip kamu sudah selesai'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || ('Selamat ' + $json.user_name + '! Trip ' + $json.trip_id + ' sudah ditandai selesai.')}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || ('Trip ' + $json.trip_id + ' sudah selesai. Terima kasih sudah pakai TravelYu!')}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Selamat ' + $json.user_name + '! Trip kamu sudah ditandai selesai. Detail: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Trip kamu sudah selesai. Terima kasih sudah pakai TravelYu! Detail: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -180,8 +187,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'Poin kamu bertambah'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', poin loyalty kamu bertambah. Cek dashboard untuk detail terbaru.')}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || ('Poin kamu bertambah! Cek saldo loyalty terbaru di TravelYu ya ✨')}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', poin loyalty kamu bertambah. Cek detail terbaru di: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Poin kamu bertambah! Cek detail terbaru di: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -197,8 +204,8 @@ export const travelYuNotificationWorkflow = {
         assignments: {
           assignments: [
             { name: "subject", value: "={{$json.subject_override || 'Tanggapan dari TravelYu Customer Success'}}", type: "string" },
-            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', tim CS kami telah membalas pesan kamu.')}}", type: "string" },
-            { name: "wa_text", value: "={{$json.wa_text_override || ('Tim CS TravelYu sudah membalas pesan kamu. Cek detailnya di dashboard.')}}", type: "string" },
+            { name: "email_text", value: "={{$json.email_text_override || ('Halo ' + $json.user_name + ', tim CS kami telah membalas pesan kamu. Lihat detail: ' + $json.trip_link)}}", type: "string" },
+            { name: "wa_text", value: "={{$json.wa_text_override || ('Tim CS TravelYu sudah membalas pesan kamu. Cek detailnya di: ' + $json.trip_link)}}", type: "string" },
           ],
         },
       },
@@ -247,7 +254,7 @@ export const travelYuNotificationWorkflow = {
         remoteJid:
           "={{ (() => { const raw = String($json.phone_e164 ?? '').replace(/\\D/g, ''); if (!raw) return ''; const normalized = raw.startsWith('62') ? raw : (raw.startsWith('0') ? ('62' + raw.slice(1)) : (raw.startsWith('8') ? ('62' + raw) : raw)); return normalized ? (normalized + '@s.whatsapp.net') : ''; })() }}",
         messageText: "={{$json.wa_text}}",
-        instanceName: "={{$env.EVOLUTION_INSTANCE || 'n8n'}}",
+        instanceName: "n8n",
         options_message: {},
       },
     },

@@ -132,7 +132,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (recipient) {
       scheduleNotification({
         eventType: "points_earned",
-        tripId: trip.id as string,
+        tripId: recipient.tripId,
+        tripPublicId: recipient.tripPublicId,
         userName: recipient.userName,
         email: recipient.email,
         phoneE164: recipient.phoneE164,

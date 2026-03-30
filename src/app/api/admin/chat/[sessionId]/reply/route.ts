@@ -76,7 +76,8 @@ export async function POST(
   if (recipient) {
     scheduleNotification({
       eventType: "cs_reply",
-      tripId: session.trip_id as string,
+      tripId: recipient.tripId,
+      tripPublicId: recipient.tripPublicId,
       userName: recipient.userName,
       email: recipient.email,
       phoneE164: recipient.phoneE164,

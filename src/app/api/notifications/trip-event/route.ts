@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       | "points_earned"
       | "cs_reply",
     tripId: recipient.tripId,
+    tripPublicId: recipient.tripPublicId,
     userName: recipient.userName,
     email: recipient.email,
     phoneE164: recipient.phoneE164,

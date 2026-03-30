@@ -1574,6 +1574,7 @@ ${JSON.stringify(generated)}`;
       scheduleNotification({
         eventType: "itinerary_ready",
         tripId: recipient.tripId,
+        tripPublicId: recipient.tripPublicId,
         userName: recipient.userName,
         email: recipient.email,
         phoneE164: recipient.phoneE164,
