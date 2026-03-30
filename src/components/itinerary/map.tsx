@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { MapPin } from "lucide-react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
@@ -96,6 +95,31 @@ function inferZoomFromBounds(bounds: ReturnType<typeof toBoundingBox>) {
   return 13;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function projectCoordinatesToOverlay(
+  lat: number,
+  lng: number,
+  bounds: { south: number; west: number; north: number; east: number },
+) {
+  const width = bounds.east - bounds.west;
+  const height = bounds.north - bounds.south;
+
+  if (width <= 0 || height <= 0) {
+    return { x: 50, y: 50 };
+  }
+
+  const rawX = ((lng - bounds.west) / width) * 100;
+  const rawY = ((bounds.north - lat) / height) * 100;
+
+  return {
+    x: clamp(rawX, 3, 97),
+    y: clamp(rawY, 3, 97),
+  };
+}
+
 function getActivityLink(item: ItineraryItem) {
   const bookingUrl = ensureValidHttpUrl(item.booking_url);
   if (bookingUrl && !isMapProviderUrl(bookingUrl)) return bookingUrl;
@@ -119,8 +143,6 @@ function getActivityLinkLabel(item: ItineraryItem) {
 }
 
 export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
-  const [useIframeFallback, setUseIframeFallback] = useState(false);
-
   const pointsWithCoordinates = items
     .filter((item) => item.location_lat !== null && item.location_lng !== null)
     .slice(0, 18);
@@ -150,19 +172,8 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
         };
 
   const openStreetMapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapBounds.west}%2C${mapBounds.south}%2C${mapBounds.east}%2C${mapBounds.north}&layer=mapnik`;
-  const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${mapBounds.centerLat}&mlon=${mapBounds.centerLng}#map=11/${mapBounds.centerLat}/${mapBounds.centerLng}`;
-
-  const staticMapUrl = pointsWithCoordinates.length > 0
-    ? (() => {
-        const zoom = inferZoomFromBounds(mapBounds);
-        const markers = pointsWithCoordinates
-          .slice(0, 14)
-          .map((item) => `${item.location_lat},${item.location_lng},red-pushpin`)
-          .join("|");
-
-        return `https://staticmap.openstreetmap.de/staticmap.php?center=${mapBounds.centerLat},${mapBounds.centerLng}&zoom=${zoom}&size=1000x420&maptype=mapnik&markers=${encodeURIComponent(markers)}`;
-      })()
-    : null;
+  const mapZoom = inferZoomFromBounds(mapBounds);
+  const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${mapBounds.centerLat}&mlon=${mapBounds.centerLng}#map=${mapZoom}/${mapBounds.centerLat}/${mapBounds.centerLng}`;
 
   return (
     <Card className="p-4">
@@ -172,25 +183,38 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
             {pointsWithCoordinates.length > 0 ? (
               <div className="space-y-2 p-2">
-                {staticMapUrl && !useIframeFallback ? (
-                  <img
-                    src={staticMapUrl}
-                    alt="Trip map with destination pins"
-                    className="h-72 w-full rounded-lg object-cover"
-                    loading="lazy"
-                    onError={() => setUseIframeFallback(true)}
-                  />
-                ) : (
+                <div className="relative">
                   <iframe title="Trip map overview" src={openStreetMapEmbedUrl} className="h-72 w-full rounded-lg" loading="lazy" />
-                )}
+                  <div className="pointer-events-none absolute inset-0 z-10">
+                    {pointsWithCoordinates.map((item, index) => {
+                      const { x, y } = projectCoordinatesToOverlay(
+                        item.location_lat as number,
+                        item.location_lng as number,
+                        mapBounds,
+                      );
+
+                      return (
+                        <span
+                          key={item.id}
+                          title={item.title}
+                          className="absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-red-500 text-[10px] font-bold text-white shadow"
+                          style={{ left: `${x}%`, top: `${y}%` }}
+                        >
+                          {index + 1}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
                 <a
                   href={openStreetMapFallbackLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
                 >
-                  Buka peta penuh di OpenStreetMap
+                  Buka peta penuh di OpenStreetMap (zoom {mapZoom})
                 </a>
+                <p className="text-[11px] text-[var(--text-soft)]">Pin bernomor mengikuti urutan lokasi di daftar di bawah.</p>
               </div>
             ) : (
               <div className="flex h-72 flex-col items-center justify-center gap-2 px-5 text-center">
