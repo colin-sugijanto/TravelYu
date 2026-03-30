@@ -213,27 +213,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   const [compareError, setCompareError] = useState<string | null>(null);
   const [serverIntakeComplete, setServerIntakeComplete] = useState(false);
   const autoAdvanceTriggeredRef = useRef(false);
-  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatLoaded, setChatLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history?type=intake`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        const data = (await res.json()) as { messages?: UIMessage[] };
-        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
-          setInitialMessages(data.messages as UIMessage[]);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setChatLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tripId]);
 
   const saveMessages = useCallback(
     async (msgs: UIMessage[]) => {
@@ -253,8 +233,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     [tripId],
   );
 
-  const { messages, sendMessage, status } = useChat({
-    messages: initialMessages,
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/ai/intake",
       body: {
@@ -266,6 +245,25 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       void saveMessages(msgs);
     },
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history?type=intake`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = (await res.json()) as { messages?: UIMessage[] };
+        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages(data.messages as UIMessage[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setChatLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId, setMessages]);
 
   const normalizedMessages = normalizeMessages(
     messages as Array<{

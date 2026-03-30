@@ -205,27 +205,18 @@ export function EditorChat({
 }) {
   const router = useRouter();
   const [input, setInput] = useState("");
-  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history?type=editor`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        const data = (await res.json()) as { messages?: UIMessage[] };
-        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
-          setInitialMessages(data.messages as UIMessage[]);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tripId]);
+  const { messages, sendMessage, status, setMessages } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/ai/editor",
+      body: { tripId },
+    }),
+    onFinish: ({ messages: msgs }) => {
+      void saveMessages(msgs);
+      router.refresh();
+    },
+  });
 
   const saveMessages = useCallback(
     async (msgs: UIMessage[]) => {
@@ -245,17 +236,24 @@ export function EditorChat({
     [tripId],
   );
 
-  const { messages, sendMessage, status } = useChat({
-    messages: initialMessages,
-    transport: new DefaultChatTransport({
-      api: "/api/ai/editor",
-      body: { tripId },
-    }),
-    onFinish: ({ messages: msgs }) => {
-      void saveMessages(msgs);
-      router.refresh();
-    },
-  });
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history?type=editor`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = (await res.json()) as { messages?: UIMessage[] };
+        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages(data.messages as UIMessage[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId, setMessages]);
 
   const isLoading = status === "submitted" || status === "streaming";
 
