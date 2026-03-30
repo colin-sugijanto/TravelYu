@@ -8,6 +8,10 @@ import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { createGoogleMapsLink } from "@/lib/utils";
 import type { ItineraryItem } from "@/types/domain";
 
+const geocodeCache = new Map<string, { lat: number; lng: number }>();
+
+type MapPointItem = ItineraryItem & { location_lat: number; location_lng: number };
+
 function ensureValidHttpUrl(value: string | null | undefined) {
   if (!value) return null;
   const trimmed = value.trim();
@@ -163,14 +167,10 @@ function getActivityLinkLabel(item: ItineraryItem) {
 
 export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [fallbackCoordinates, setFallbackCoordinates] = useState<Record<string, { lat: number; lng: number }>>({});
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const markerRefs = useRef<Record<string, CircleMarker>>({});
-
-  const pointsWithCoordinates = useMemo(
-    () => items.filter((item) => item.location_lat !== null && item.location_lng !== null).slice(0, 18),
-    [items],
-  );
 
   const points = useMemo(
     () =>
@@ -183,6 +183,114 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
         .slice(0, 18),
     [items],
   );
+
+  const pointsWithCoordinates = useMemo(
+    () =>
+      points
+        .map((item): MapPointItem | null => {
+          if (typeof item.location_lat === "number" && typeof item.location_lng === "number") {
+            return {
+              ...(item as ItineraryItem),
+              location_lat: item.location_lat,
+              location_lng: item.location_lng,
+            };
+          }
+
+          const fallback = fallbackCoordinates[item.id];
+          if (!fallback) return null;
+
+          return {
+            ...(item as ItineraryItem),
+            location_lat: fallback.lat,
+            location_lng: fallback.lng,
+          };
+        })
+        .filter((item): item is MapPointItem => item !== null),
+    [fallbackCoordinates, points],
+  );
+
+  const pointsWithCoordinatesById = useMemo(() => {
+    return Object.fromEntries(pointsWithCoordinates.map((item) => [item.id, item]));
+  }, [pointsWithCoordinates]);
+
+  const geocodeTargets = useMemo(() => {
+    return points
+      .filter((item) => item.location_lat === null || item.location_lng === null)
+      .filter((item) => !fallbackCoordinates[item.id])
+      .map((item) => {
+        const query = item.location_address?.trim() || item.title;
+        return {
+          id: item.id,
+          query,
+        };
+      })
+      .filter((item) => item.query.length > 0)
+      .slice(0, 12);
+  }, [fallbackCoordinates, points]);
+
+  const geocodeTargetKey = useMemo(() => geocodeTargets.map((item) => `${item.id}:${item.query}`).join("|"), [geocodeTargets]);
+
+  useEffect(() => {
+    if (geocodeTargets.length < 1) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      const resolved: Record<string, { lat: number; lng: number }> = {};
+
+      for (const target of geocodeTargets) {
+        if (cancelled) return;
+
+        const cached = geocodeCache.get(target.query.toLowerCase());
+        if (cached) {
+          resolved[target.id] = cached;
+          continue;
+        }
+
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(target.query)}`,
+            {
+              headers: {
+                Accept: "application/json",
+              },
+            },
+          );
+
+          if (!response.ok) continue;
+
+          const data = (await response.json()) as Array<{ lat?: string; lon?: string }>;
+          const first = data[0];
+          if (!first?.lat || !first.lon) continue;
+
+          const lat = Number.parseFloat(first.lat);
+          const lng = Number.parseFloat(first.lon);
+          if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
+
+          const coord = { lat, lng };
+          geocodeCache.set(target.query.toLowerCase(), coord);
+          resolved[target.id] = coord;
+
+          await new Promise((resolve) => setTimeout(resolve, 120));
+        } catch {
+          continue;
+        }
+      }
+
+      if (cancelled || Object.keys(resolved).length < 1) return;
+
+      setFallbackCoordinates((prev) => ({
+        ...prev,
+        ...resolved,
+      }));
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [geocodeTargetKey, geocodeTargets]);
 
   const pointsKey = useMemo(
     () => pointsWithCoordinates.map((item) => `${item.id}:${item.location_lat}:${item.location_lng}`).join("|"),
@@ -348,7 +456,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
                 selectedPointId === item.id ? "ring-2 ring-[var(--brand-blue-strong)]" : ""
               }`}
               onClick={() => {
-                if (item.location_lat !== null && item.location_lng !== null) {
+                if (pointsWithCoordinatesById[item.id]) {
                   setSelectedPointId(item.id);
                 }
               }}
