@@ -225,6 +225,9 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
         attributionControl: true,
       });
 
+      // Exposed for Playwright verification in production.
+      (window as Window & { __travelYuLeafletMap?: LeafletMap }).__travelYuLeafletMap = map;
+
       mapInstanceRef.current = map;
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
