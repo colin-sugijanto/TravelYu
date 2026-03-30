@@ -8,6 +8,12 @@ type StoredMessage = {
   parts: Array<{ type: string; text?: string; [key: string]: unknown }>;
 };
 
+const PERSISTED_PART_TYPES = new Set(["text", "tool-invocation", "tool-call", "tool-result"]);
+
+function sanitizeParts(parts: Array<{ type: string; [key: string]: unknown }>) {
+  return parts.filter((part) => PERSISTED_PART_TYPES.has(part.type));
+}
+
 const VALID_TYPES = new Set(["editor", "intake"]);
 
 function storageKey(type: string) {
@@ -47,7 +53,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const intakeData = (trip.intake_data ?? {}) as Record<string, unknown>;
-  const messages = (intakeData[storageKey(type)] as StoredMessage[] | undefined) ?? [];
+  const rawMessages = (intakeData[storageKey(type)] as StoredMessage[] | undefined) ?? [];
+  const messages = rawMessages.map((m) => ({
+    ...m,
+    parts: sanitizeParts(m.parts as Array<{ type: string; [key: string]: unknown }>),
+  }));
 
   return Response.json({ messages });
 }
@@ -69,7 +79,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const type = body.type!;
-  const messages = body.messages.slice(-50);
+  const messages = body.messages.slice(-50).map((m) => ({
+    ...m,
+    parts: sanitizeParts(m.parts as Array<{ type: string; [key: string]: unknown }>),
+  }));
 
   const trip = await resolveAccessibleTrip(id, appUser.id);
   if (!trip) {
