@@ -209,7 +209,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
   const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${mapBounds.centerLat}&mlon=${mapBounds.centerLng}#map=${mapZoom}/${mapBounds.centerLat}/${mapBounds.centerLng}`;
 
   useEffect(() => {
-    if (!mapContainerRef.current || pointsWithCoordinates.length < 1) return;
+    if (!mapContainerRef.current || points.length < 1) return;
 
     let isCancelled = false;
 
@@ -237,11 +237,11 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
 
-      const latLngs = pointsWithCoordinates.map((item) =>
-        L.latLng(item.location_lat as number, item.location_lng as number),
-      );
+      const latLngs = pointsWithCoordinates.map((item) => L.latLng(item.location_lat as number, item.location_lng as number));
 
-      if (latLngs.length === 1) {
+      if (latLngs.length === 0) {
+        map.setView([mapBounds.centerLat, mapBounds.centerLng], mapZoom);
+      } else if (latLngs.length === 1) {
         map.setView(latLngs[0], 13);
       } else {
         map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24], maxZoom: 13 });
@@ -280,7 +280,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       }
       markerRefs.current = {};
     };
-  }, [pointsKey, pointsWithCoordinates]);
+  }, [mapBounds.centerLat, mapBounds.centerLng, mapZoom, points.length, pointsKey, pointsWithCoordinates]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -306,35 +306,35 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-alt)] p-3">
         {points.length > 0 ? (
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
-            {pointsWithCoordinates.length > 0 ? (
-              <div className="space-y-2 p-2">
-                <div ref={mapContainerRef} className="h-72 w-full rounded-lg" aria-label="Interactive itinerary map" />
-                <a
-                  href={openStreetMapFallbackLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
-                >
-                  Buka peta penuh di OpenStreetMap (zoom {mapZoom})
-                </a>
+            <div className="space-y-2 p-2">
+              <div ref={mapContainerRef} className="h-72 w-full rounded-lg" aria-label="Interactive itinerary map" />
+              <a
+                href={openStreetMapFallbackLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
+              >
+                Buka peta penuh di OpenStreetMap (zoom {mapZoom})
+              </a>
+              {pointsWithCoordinates.length > 0 ? (
                 <p className="text-[11px] text-[var(--text-soft)]">Klik pin di peta untuk menyorot lokasi pada daftar di bawah.</p>
-              </div>
-            ) : (
-              <div className="flex h-72 flex-col items-center justify-center gap-2 px-5 text-center">
-                <p className="text-sm font-semibold text-[var(--text)]">Koordinat belum tersedia untuk itinerary ini.</p>
-                <p className="text-xs text-[var(--text-soft)]">TravelYu tetap menyiapkan link peta per aktivitas di daftar bawah.</p>
-                {firstAvailableMapLink ? (
-                  <a
-                    href={firstAvailableMapLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
-                  >
-                    Buka lokasi pertama di Google Maps
-                  </a>
-                ) : null}
-              </div>
-            )}
+              ) : (
+                <>
+                  <p className="text-[11px] font-semibold text-[var(--text)]">Koordinat belum tersedia, peta tetap ditampilkan dengan estimasi area tujuan.</p>
+                  <p className="text-[11px] text-[var(--text-soft)]">Gunakan link lokasi di bawah untuk membuka navigasi Google Maps per aktivitas.</p>
+                  {firstAvailableMapLink ? (
+                    <a
+                      href={firstAvailableMapLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
+                    >
+                      Buka lokasi pertama di Google Maps
+                    </a>
+                  ) : null}
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <CardText>No location pins available yet.</CardText>

@@ -8,7 +8,7 @@ Stack:
 - Clerk (Auth)
 - Supabase (Postgres + Storage + RLS)
 - Vercel AI SDK + Google AI Studio
-- MapTiler API (map rendering)
+- OpenStreetMap + Leaflet (map rendering)
 - n8n (Gmail + Evolution API for email + WhatsApp)
 
 ## Implemented Scope (MVP baseline)
@@ -50,7 +50,6 @@ Key variables:
 - `CLERK_SECRET_KEY`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `NEXT_PUBLIC_MAPTILER_API_KEY`
 - `OPENWEATHERMAP_API_KEY`
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
