@@ -106,8 +106,8 @@ function stripTitleNoise(value: string | null | undefined) {
   if (!value) return null;
   const stripped = value
     .replace(TITLE_NOISE_RE, "")
-    .replace(/^(in|at|to|from|di|ke|dari|pada)\s+/i, "")
     .replace(/^[\s:–—-]+/, "")
+    .replace(/^(in|at|to|from|di|ke|dari|pada)\s+/i, "")
     .trim();
   return stripped.length > 0 ? stripped : null;
 }
