@@ -44,16 +44,22 @@ function isSameTripScope(context: ItineraryToolContext, tripId: string) {
 export function createItineraryTools(context: ItineraryToolContext) {
   return {
     update_itinerary_item: {
-    description: "Update minor editable fields for draft/booked_flexible itinerary item",
+    description: "Update minor editable fields for draft/booked_flexible itinerary item by itemId or by day/title match",
     inputSchema: z.object({
-      itemId: z.string(),
+      itemId: z.string().optional(),
+      dayNumber: z.number().int().min(1).optional(),
+      currentTitle: z.string().min(1).optional(),
       title: z.string().optional(),
       description: z.string().optional(),
       tips: z.string().optional(),
       timeSlot: z.enum(["morning", "afternoon", "evening", "night"]).optional(),
+    }).refine((value) => Boolean(value.itemId || value.currentTitle), {
+      message: "itemId or currentTitle is required",
     }),
     execute: async (input: {
-      itemId: string;
+      itemId?: string;
+      dayNumber?: number;
+      currentTitle?: string;
       title?: string;
       description?: string;
       tips?: string;
@@ -61,12 +67,41 @@ export function createItineraryTools(context: ItineraryToolContext) {
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
-      const { data: item } = await supabaseAdmin
-        .from("itinerary_items")
-        .select("id,status,trip_id")
-        .eq("id", input.itemId)
-        .eq("trip_id", context.tripId)
-        .single();
+      let item: { id: string; status: string; trip_id: string } | null = null;
+
+      if (input.itemId) {
+        const { data } = await supabaseAdmin
+          .from("itinerary_items")
+          .select("id,status,trip_id")
+          .eq("id", input.itemId)
+          .eq("trip_id", context.tripId)
+          .maybeSingle();
+
+        if (data) {
+          item = data;
+        }
+      }
+
+      if (!item) {
+        let statement = supabaseAdmin
+          .from("itinerary_items")
+          .select("id,status,trip_id")
+          .eq("trip_id", context.tripId);
+
+        if (typeof input.dayNumber === "number") {
+          statement = statement.eq("day_number", input.dayNumber);
+        }
+
+        const currentTitle = input.currentTitle?.trim();
+        if (currentTitle) {
+          statement = statement.ilike("title", `%${currentTitle}%`);
+        }
+
+        const { data } = await statement.order("sort_order", { ascending: true }).limit(1).maybeSingle();
+        if (data) {
+          item = data;
+        }
+      }
 
       if (!item) return { ok: false, reason: "Item not found" };
       if (item.status === "booked_locked") {
@@ -90,7 +125,7 @@ export function createItineraryTools(context: ItineraryToolContext) {
       revalidateTag(`trip:${item.trip_id}:items`, "max");
       revalidateTag(`trip:${item.trip_id}`, "max");
 
-      return { ok: true };
+      return { ok: true, itemId: item.id };
     },
   },
 
