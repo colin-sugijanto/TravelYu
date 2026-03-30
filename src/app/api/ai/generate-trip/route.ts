@@ -306,6 +306,61 @@ function enrichGeneratedWithVendorData(
   };
 }
 
+function attachCoordinatesFromKnownAddresses(
+  generated: z.infer<typeof generatedItinerarySchema>,
+  vendors: VendorMatchCandidate[] | null | undefined,
+) {
+  if (!vendors || vendors.length < 1) return generated;
+
+  const candidates = vendors
+    .filter((vendor) => typeof vendor.location_lat === "number" && typeof vendor.location_lng === "number")
+    .map((vendor) => ({
+      ...vendor,
+      normalizedName: normalizeComparableText(vendor.name),
+      normalizedCity: normalizeComparableText(vendor.city),
+    }));
+
+  if (candidates.length < 1) return generated;
+
+  const mappedItems = generated.items.map((item) => {
+    if (typeof item.locationLat === "number" && typeof item.locationLng === "number") {
+      return item;
+    }
+
+    const normalizedTitle = normalizeComparableText(inferPlaceName(item.title));
+    const normalizedAddress = normalizeComparableText(item.locationAddress);
+
+    let best: (typeof candidates)[number] | null = null;
+    let bestScore = 0;
+
+    for (const candidate of candidates) {
+      let score = 0;
+
+      if (normalizedTitle && candidate.normalizedName && normalizedTitle.includes(candidate.normalizedName)) score += 6;
+      if (candidate.normalizedName && normalizedTitle && candidate.normalizedName.includes(normalizedTitle)) score += 4;
+      if (candidate.normalizedCity && normalizedAddress.includes(candidate.normalizedCity)) score += 2;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+
+    if (!best || bestScore < 4) return item;
+
+    return {
+      ...item,
+      locationLat: typeof item.locationLat === "number" ? item.locationLat : best.location_lat ?? undefined,
+      locationLng: typeof item.locationLng === "number" ? item.locationLng : best.location_lng ?? undefined,
+    };
+  });
+
+  return {
+    ...generated,
+    items: mappedItems,
+  };
+}
+
 function isSearchResultsUrl(value: string) {
   try {
     const parsed = new URL(value);
@@ -1451,6 +1506,7 @@ ${JSON.stringify(generated)}`;
       }
 
       generated = enrichGeneratedWithVendorData(generated, relevantVendors as VendorMatchCandidate[] | null | undefined);
+      generated = attachCoordinatesFromKnownAddresses(generated, relevantVendors as VendorMatchCandidate[] | null | undefined);
 
       saveItineraryResult = await persistGeneratedItinerary(toPersistPayload(body.tripId, generated));
       console.log(

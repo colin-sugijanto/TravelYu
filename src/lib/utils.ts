@@ -76,6 +76,7 @@ export function createGoogleMapsLink(input: {
   const normalizedTitle =
     normalize(title)
       .replace(/^hidden\s+gem:\s*/i, "")
+      .replace(/^flight\s+to\s+/i, "")
       .replace(/^arrival\s+and\s+transfer\s*/i, "")
       .replace(/^departure\s+transfer\s*/i, "")
       .replace(/^arrival\s+at\s+/i, "")

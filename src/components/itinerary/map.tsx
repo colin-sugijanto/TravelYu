@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { MapPin } from "lucide-react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
@@ -79,6 +80,22 @@ function toBoundingBox(pointsWithCoordinates: ItineraryItem[]) {
   };
 }
 
+function inferZoomFromBounds(bounds: ReturnType<typeof toBoundingBox>) {
+  const latSpan = Math.abs(bounds.north - bounds.south);
+  const lngSpan = Math.abs(bounds.east - bounds.west);
+  const span = Math.max(latSpan, lngSpan);
+
+  if (span > 10) return 5;
+  if (span > 5) return 6;
+  if (span > 2) return 7;
+  if (span > 1) return 8;
+  if (span > 0.5) return 9;
+  if (span > 0.2) return 10;
+  if (span > 0.1) return 11;
+  if (span > 0.05) return 12;
+  return 13;
+}
+
 function getActivityLink(item: ItineraryItem) {
   const bookingUrl = ensureValidHttpUrl(item.booking_url);
   if (bookingUrl && !isMapProviderUrl(bookingUrl)) return bookingUrl;
@@ -102,6 +119,8 @@ function getActivityLinkLabel(item: ItineraryItem) {
 }
 
 export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
+  const [useIframeFallback, setUseIframeFallback] = useState(false);
+
   const pointsWithCoordinates = items
     .filter((item) => item.location_lat !== null && item.location_lng !== null)
     .slice(0, 18);
@@ -133,6 +152,18 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
   const openStreetMapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapBounds.west}%2C${mapBounds.south}%2C${mapBounds.east}%2C${mapBounds.north}&layer=mapnik`;
   const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${mapBounds.centerLat}&mlon=${mapBounds.centerLng}#map=11/${mapBounds.centerLat}/${mapBounds.centerLng}`;
 
+  const staticMapUrl = pointsWithCoordinates.length > 0
+    ? (() => {
+        const zoom = inferZoomFromBounds(mapBounds);
+        const markers = pointsWithCoordinates
+          .slice(0, 14)
+          .map((item) => `${item.location_lat},${item.location_lng},red-pushpin`)
+          .join("|");
+
+        return `https://staticmap.openstreetmap.de/staticmap.php?center=${mapBounds.centerLat},${mapBounds.centerLng}&zoom=${zoom}&size=1000x420&maptype=mapnik&markers=${encodeURIComponent(markers)}`;
+      })()
+    : null;
+
   return (
     <Card className="p-4">
       <CardTitle>Map Overview</CardTitle>
@@ -141,7 +172,17 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
             {pointsWithCoordinates.length > 0 ? (
               <div className="space-y-2 p-2">
-                <iframe title="Trip map overview" src={openStreetMapEmbedUrl} className="h-72 w-full rounded-lg" loading="lazy" />
+                {staticMapUrl && !useIframeFallback ? (
+                  <img
+                    src={staticMapUrl}
+                    alt="Trip map with destination pins"
+                    className="h-72 w-full rounded-lg object-cover"
+                    loading="lazy"
+                    onError={() => setUseIframeFallback(true)}
+                  />
+                ) : (
+                  <iframe title="Trip map overview" src={openStreetMapEmbedUrl} className="h-72 w-full rounded-lg" loading="lazy" />
+                )}
                 <a
                   href={openStreetMapFallbackLink}
                   target="_blank"
