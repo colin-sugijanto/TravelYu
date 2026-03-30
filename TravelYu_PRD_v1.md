@@ -3,7 +3,7 @@
 **AI-assisted personal travel planning platform for Indonesian destinations**  
 Version 1.2 | March 2026 | Updated to match current repository + implementation plan progress
 
-**Current stack:** Next.js 16 (App Router) - Tailwind CSS - Clerk - Supabase - Vercel AI SDK - OpenRouter - n8n - MapTiler - OpenWeatherMap - Upstash Redis - Tavily
+**Current stack:** Next.js 16 (App Router) - Tailwind CSS - Clerk - Supabase - Vercel AI SDK - OpenRouter - n8n - OpenStreetMap + Leaflet - OpenWeatherMap - Upstash Redis - Tavily
 
 ---
 
@@ -59,7 +59,7 @@ This repository currently delivers an MVP planning product (not a booking engine
 - trip lifecycle transitions (`draft`/`approved`/`active`/`completed`),
 - admin queue/chat/oversight tooling,
 - post-trip reviews, memory wall, and points automation,
-- notification webhook integration and cron reminders.
+- notification webhook integration.
 
 ### 1.4 Explicitly Out of Scope (Current)
 
@@ -110,7 +110,7 @@ Identity and sessions are handled by **Clerk**. App profile + role + loyalty dat
    - `draft` in production path.
 9. If trip is `draft`, admin approves from `/admin/trips`.
 10. User works in `/trip/[id]` (timeline, map, weather, budget, AI editor, CS chat, regen day).
-11. User activates trip (`approved` -> `active`) and later completes trip (`active`/`approved` -> `completed`), or admin/cron completes as needed.
+11. User activates trip (`approved` -> `active`) and later completes trip (`active`/`approved` -> `completed`), or admin completes as needed.
 12. Post-trip flows unlock: vendor review, photo memory wall, points events, share links.
 
 ---
@@ -179,7 +179,7 @@ Implemented:
 - timeline by day with status badges,
 - per-day regeneration (`POST /api/trip/[id]/regen-day`),
 - verified vendor modal (`VendorModal`) on internal DB items,
-- map overview with static MapTiler image / OSM iframe fallback,
+- map overview with OpenStreetMap + Leaflet,
 - budget tracker by category and total,
 - weather banner backed by OpenWeatherMap (graceful fallback),
 - AI editor chat (`POST /api/ai/editor`) with tool invocation/result rendering,
@@ -342,7 +342,6 @@ Implemented tool calls include:
 - `POST /api/admin/chat/[sessionId]/reply`
 - `POST /api/vendor/contact`
 - `POST /api/notifications/trip-event`
-- `GET /api/cron/trip-reminders`
 
 ### 7.5 Utility APIs
 
@@ -400,7 +399,7 @@ Implemented tool calls include:
 | OpenRouter | LLM routing for intake/compare/generation/editor |
 | Tavily | Supplemental web context for generation/editor tools |
 | OpenWeatherMap | Forecast data for weather banner and AI weather tool |
-| MapTiler / OpenStreetMap | Map overview rendering |
+| OpenStreetMap + Leaflet | Map overview rendering |
 | n8n | Email + WhatsApp orchestration via webhook |
 | Upstash Redis | AI endpoint rate limiting |
 
@@ -415,14 +414,6 @@ Implemented tool calls include:
 - `points_earned`
 - `cs_reply`
 
-### 9.3 Cron Automation
-
-`/api/cron/trip-reminders` is scheduled in `vercel.json` and currently handles:
-
-- H-1 reminders for `active` trips starting tomorrow,
-- auto-completion of expired `active` trips,
-- completion points award on auto-complete path.
-
 ---
 
 ## 10. Non-Functional Requirements
@@ -434,7 +425,6 @@ Implemented tool calls include:
 - trip ownership/group membership checks for trip resources,
 - Supabase RLS and hardened migrations,
 - token validation for internal notifications endpoint,
-- cron secret validation on scheduled endpoint.
 
 ### 10.2 Reliability and Failure Handling
 
@@ -459,11 +449,9 @@ Core required variables:
 - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
 - `OPENWEATHERMAP_API_KEY`
-- `NEXT_PUBLIC_MAPTILER_API_KEY`
 - `N8N_NOTIFICATION_WEBHOOK_URL`, `N8N_NOTIFICATION_WEBHOOK_TOKEN`
 - `TRAVELYU_INTERNAL_API_TOKEN`
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
-- `CRON_SECRET`
 
 Feature-optional but recommended:
 
@@ -500,7 +488,7 @@ Detailed sequencing remains in `TRAVELYU_IMPLEMENTATION_PLAN.md`.
 - editor tool result rendering + day regeneration,
 - admin approve/complete/flag/chat operations,
 - post-trip reviews/photos/points automation,
-- cron reminder + auto-complete lifecycle automation,
+- lifecycle automation via in-app and admin actions,
 - n8n notification event integration.
 
 ### 12.2 Next Delivery Focus
