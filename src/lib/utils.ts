@@ -60,16 +60,41 @@ export function createGoogleMapsLink(input: {
 }) {
   const { lat, lng, address, title } = input;
 
+  const normalize = (value: string | null | undefined) => value?.trim().replace(/\s+/g, " ") ?? "";
+
+  const splitRoute = (value: string) => {
+    const match = /(.+?)\s+to\s+(.+)/i.exec(value);
+    if (!match) return null;
+
+    const origin = match[1]?.trim();
+    const destination = match[2]?.trim();
+    if (!origin || !destination) return null;
+
+    return { origin, destination };
+  };
+
   const normalizedTitle =
-    title
-      ?.trim()
+    normalize(title)
       .replace(/^hidden\s+gem:\s*/i, "")
+      .replace(/^arrival\s+and\s+transfer\s*/i, "")
+      .replace(/^departure\s+transfer\s*/i, "")
+      .replace(/^arrival\s+at\s+/i, "")
+      .replace(/^departure\s+to\s+/i, "")
+      .replace(/^transfer\s+to\s+/i, "")
       .replace(/^(lunch|dinner|breakfast|brunch|meal)\s+at\s+/i, "")
       .replace(/^(check-?in|check in|stay)\s+at\s+/i, "")
       .replace(/^(sunset\s+dining|dining)\s+at\s+/i, "")
       .replace(/^(relax|explore|exploration|visit)\s+at\s+/i, "")
       .trim() || "";
-  const normalizedAddress = address?.trim() || "";
+  const normalizedAddress = normalize(address);
+
+  const routeFromAddress = splitRoute(normalizedAddress);
+  const routeFromTitle = splitRoute(normalizedTitle);
+  const route = routeFromAddress ?? routeFromTitle;
+
+  if (route) {
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(route.origin)}&destination=${encodeURIComponent(route.destination)}`;
+  }
 
   const queryCandidates = [
     normalizedTitle && normalizedAddress ? `${normalizedTitle}, ${normalizedAddress}` : "",

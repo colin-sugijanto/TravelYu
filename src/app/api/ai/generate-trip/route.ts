@@ -95,6 +95,10 @@ function tokenizeForRelevance(parts: Array<string | undefined>) {
     "tickets",
     "tour",
     "trip",
+    "city",
+    "center",
+    "airport",
+    "international",
   ]);
 
   const tokens = parts
@@ -121,6 +125,185 @@ function isLikelyRelevantUrl(value: string, title: string, locationAddress?: str
   } catch {
     return false;
   }
+}
+
+function scoreProviderUrl(value: string, title: string, locationAddress?: string) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    const hasQuery = parsed.searchParams.toString().length > 0;
+
+    if (!host || host.includes("localhost")) return 0;
+
+    let score = 0;
+
+    if (path && path !== "/") score += 2;
+    if (hasQuery) score += 1;
+
+    const tokens = tokenizeForRelevance([inferPlaceName(title), locationAddress]);
+    const haystack = `${host}${path}`;
+    for (const token of tokens) {
+      if (haystack.includes(token)) score += 3;
+    }
+
+    if (host.includes("google.") && path === "/search") score -= 3;
+    if (host.includes("rome2rio.com")) score += 1;
+
+    return score;
+  } catch {
+    return 0;
+  }
+}
+
+function buildSpecificSearchFallback(input: {
+  activityType: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest";
+  title: string;
+  locationAddress?: string;
+}) {
+  const placeName = inferPlaceName(input.title);
+  const locationText = normalizeQueryPart(input.locationAddress);
+
+  if (input.activityType === "accommodation") {
+    return buildGoogleSearchUrl([placeName, locationText, "official booking"]);
+  }
+
+  if (input.activityType === "dining") {
+    return buildGoogleSearchUrl([placeName, locationText, "official website menu"]);
+  }
+
+  if (input.activityType === "transport") {
+    const routeText = inferRouteText(input.title, input.locationAddress);
+    return buildGoogleSearchUrl([routeText || `${placeName} ${locationText}`, "transport booking"]);
+  }
+
+  if (input.activityType === "attraction" || input.activityType === "experience") {
+    return buildGoogleSearchUrl([placeName, locationText, "official ticket booking"]);
+  }
+
+  return buildGoogleSearchUrl([placeName, locationText]);
+}
+
+type VendorMatchCandidate = {
+  id: string;
+  name: string;
+  type: string;
+  city: string;
+  province?: string | null;
+  api_endpoint?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+};
+
+function normalizeComparableText(value: string | undefined | null) {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeComparableText(value: string | undefined | null) {
+  return normalizeComparableText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+}
+
+function allowedVendorTypesByActivity(activityType: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest") {
+  if (activityType === "accommodation") return new Set(["hotel", "villa"]);
+  if (activityType === "transport") return new Set(["transport"]);
+  if (activityType === "dining") return new Set(["restaurant"]);
+  if (activityType === "attraction") return new Set(["attraction"]);
+  if (activityType === "experience") return new Set(["experience", "guide", "attraction"]);
+  return null;
+}
+
+function scoreVendorMatch(input: {
+  itemTitle: string;
+  itemAddress?: string;
+  itemActivityType: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest";
+  vendor: VendorMatchCandidate;
+}) {
+  const normalizedItemTitle = normalizeComparableText(inferPlaceName(input.itemTitle));
+  const normalizedItemAddress = normalizeComparableText(input.itemAddress);
+  const normalizedVendorName = normalizeComparableText(input.vendor.name);
+
+  if (!normalizedItemTitle || !normalizedVendorName) return 0;
+
+  let score = 0;
+
+  if (normalizedItemTitle === normalizedVendorName) score += 14;
+  if (normalizedItemTitle.includes(normalizedVendorName) || normalizedVendorName.includes(normalizedItemTitle)) score += 8;
+
+  const itemTokens = new Set(tokenizeComparableText(`${normalizedItemTitle} ${normalizedItemAddress}`));
+  const vendorTokens = tokenizeComparableText(input.vendor.name);
+  const overlap = vendorTokens.filter((token) => itemTokens.has(token)).length;
+  score += overlap * 2;
+
+  const vendorCity = normalizeComparableText(input.vendor.city);
+  if (vendorCity && normalizedItemAddress.includes(vendorCity)) score += 3;
+
+  const allowedVendorTypes = allowedVendorTypesByActivity(input.itemActivityType);
+  const vendorType = normalizeComparableText(input.vendor.type);
+  if (allowedVendorTypes) {
+    if (allowedVendorTypes.has(vendorType)) score += 4;
+    else score -= 2;
+  }
+
+  return score;
+}
+
+function enrichGeneratedWithVendorData(
+  generated: z.infer<typeof generatedItinerarySchema>,
+  vendors: VendorMatchCandidate[] | null | undefined,
+) {
+  if (!vendors || vendors.length < 1) return generated;
+
+  const normalizedVendors = vendors.map((vendor) => ({
+    ...vendor,
+    location_lat: typeof vendor.location_lat === "number" ? vendor.location_lat : null,
+    location_lng: typeof vendor.location_lng === "number" ? vendor.location_lng : null,
+  }));
+
+  const enrichedItems = generated.items.map((item) => {
+    let bestVendor: VendorMatchCandidate | null = null;
+    let bestScore = 0;
+
+    for (const vendor of normalizedVendors) {
+      const score = scoreVendorMatch({
+        itemTitle: item.title,
+        itemAddress: item.locationAddress,
+        itemActivityType: item.activityType,
+        vendor,
+      });
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestVendor = vendor;
+      }
+    }
+
+    if (!bestVendor || bestScore < 8) return item;
+
+    const vendorAddress = [bestVendor.city, bestVendor.province ?? ""].filter(Boolean).join(", ").trim();
+    const candidateVendorUrl = ensureValidHttpUrl(bestVendor.api_endpoint ?? undefined) ?? undefined;
+
+    return {
+      ...item,
+      source: "internal_db" as const,
+      locationAddress: item.locationAddress?.trim() || vendorAddress || item.title,
+      locationLat: typeof item.locationLat === "number" ? item.locationLat : bestVendor.location_lat ?? undefined,
+      locationLng: typeof item.locationLng === "number" ? item.locationLng : bestVendor.location_lng ?? undefined,
+      bookingUrl: item.bookingUrl ?? candidateVendorUrl,
+    };
+  });
+
+  return {
+    ...generated,
+    items: enrichedItems,
+  };
 }
 
 function isSearchResultsUrl(value: string) {
@@ -247,21 +430,45 @@ function buildSpecificWebsiteUrl(input: {
 }) {
   const validated = ensureValidHttpUrl(input.bookingUrl);
 
-  if (
+  const acceptedProvidedUrl =
     validated &&
     !isMapProviderUrl(validated) &&
     !isGenericHomepageUrl(validated) &&
     !isSearchResultsUrl(validated) &&
-    (input.source !== "web_search" || isLikelyRelevantUrl(validated, input.title, input.locationAddress))
-  ) {
+    (input.source !== "web_search" || isLikelyRelevantUrl(validated, input.title, input.locationAddress));
+
+  if (acceptedProvidedUrl) {
     return validated;
   }
 
-  return fallbackWebsiteUrl({
+  const generatedFallback = fallbackWebsiteUrl({
     activityType: input.activityType,
     title: input.title,
     locationAddress: input.locationAddress,
   });
+
+  const specificSearchFallback = buildSpecificSearchFallback({
+    activityType: input.activityType,
+    title: input.title,
+    locationAddress: input.locationAddress,
+  });
+
+  const candidates = [generatedFallback, specificSearchFallback].filter((url): url is string => Boolean(url));
+
+  if (candidates.length < 1) return null;
+
+  let bestUrl = candidates[0];
+  let bestScore = scoreProviderUrl(bestUrl, input.title, input.locationAddress);
+
+  for (const candidate of candidates.slice(1)) {
+    const candidateScore = scoreProviderUrl(candidate, input.title, input.locationAddress);
+    if (candidateScore > bestScore) {
+      bestUrl = candidate;
+      bestScore = candidateScore;
+    }
+  }
+
+  return bestUrl;
 }
 
 type ComparisonSummary = {
@@ -911,7 +1118,7 @@ export async function POST(request: Request) {
   const { data: relevantVendors } = destinationCity
     ? await supabaseAdmin
         .from("vendors")
-        .select("id,name,type,city,price_tier,avg_rating,tags")
+        .select("id,name,type,city,province,price_tier,avg_rating,tags,location_lat,location_lng,api_endpoint")
         .ilike("city", `%${destinationCity}%`)
         .eq("is_verified", true)
         .limit(30)
@@ -1242,6 +1449,8 @@ ${JSON.stringify(generated)}`;
           }
         }
       }
+
+      generated = enrichGeneratedWithVendorData(generated, relevantVendors as VendorMatchCandidate[] | null | undefined);
 
       saveItineraryResult = await persistGeneratedItinerary(toPersistPayload(body.tripId, generated));
       console.log(

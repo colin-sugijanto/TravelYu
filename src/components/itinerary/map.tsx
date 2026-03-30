@@ -52,6 +52,33 @@ function getMapLink(item: ItineraryItem) {
   return isMapProviderUrl(bookingUrl) ? bookingUrl : null;
 }
 
+function toBoundingBox(pointsWithCoordinates: ItineraryItem[]) {
+  const lats = pointsWithCoordinates.map((item) => item.location_lat as number);
+  const lngs = pointsWithCoordinates.map((item) => item.location_lng as number);
+
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  const latPadding = Math.max((maxLat - minLat) * 0.25, 0.04);
+  const lngPadding = Math.max((maxLng - minLng) * 0.25, 0.05);
+
+  const south = minLat - latPadding;
+  const north = maxLat + latPadding;
+  const west = minLng - lngPadding;
+  const east = maxLng + lngPadding;
+
+  return {
+    south,
+    west,
+    north,
+    east,
+    centerLat: (south + north) / 2,
+    centerLng: (west + east) / 2,
+  };
+}
+
 function getActivityLink(item: ItineraryItem) {
   const bookingUrl = ensureValidHttpUrl(item.booking_url);
   if (bookingUrl && !isMapProviderUrl(bookingUrl)) return bookingUrl;
@@ -91,18 +118,20 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
     .map((item) => getMapLink(item))
     .find((url): url is string => Boolean(url));
 
-  const lats = pointsWithCoordinates.map((item) => item.location_lat as number);
-  const lngs = pointsWithCoordinates.map((item) => item.location_lng as number);
+  const mapBounds =
+    pointsWithCoordinates.length > 0
+      ? toBoundingBox(pointsWithCoordinates)
+      : {
+          south: -8.52,
+          west: 114.92,
+          north: -8.02,
+          east: 115.42,
+          centerLat: -8.27,
+          centerLng: 115.17,
+        };
 
-  const minLat = lats.length > 0 ? Math.min(...lats) : -8.4095;
-  const maxLat = lats.length > 0 ? Math.max(...lats) : -8.2095;
-  const minLng = lngs.length > 0 ? Math.min(...lngs) : 115.088;
-  const maxLng = lngs.length > 0 ? Math.max(...lngs) : 115.288;
-
-  const centerLat = (minLat + maxLat) / 2;
-  const centerLng = (minLng + maxLng) / 2;
-  const openStreetMapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${centerLng - 0.12}%2C${centerLat - 0.08}%2C${centerLng + 0.12}%2C${centerLat + 0.08}&layer=mapnik`;
-  const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${centerLat}&mlon=${centerLng}#map=11/${centerLat}/${centerLng}`;
+  const openStreetMapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapBounds.west}%2C${mapBounds.south}%2C${mapBounds.east}%2C${mapBounds.north}&layer=mapnik`;
+  const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${mapBounds.centerLat}&mlon=${mapBounds.centerLng}#map=11/${mapBounds.centerLat}/${mapBounds.centerLng}`;
 
   return (
     <Card className="p-4">
