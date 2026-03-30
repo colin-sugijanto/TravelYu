@@ -113,15 +113,20 @@ function ensureLeafletAssetsLoaded() {
     style.id = "travelyu-leaflet-pin-style";
     style.textContent = `
       .travelyu-map-pin-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         background: #ef4444;
         border: 2px solid #ffffff;
         border-radius: 9999px;
         color: #ffffff;
         font-weight: 700;
-        font-size: 10px;
-        line-height: 16px;
-        min-width: 18px;
-        height: 18px;
+        font-size: 11px;
+        line-height: 1;
+        width: 20px;
+        min-width: 20px;
+        height: 20px;
+        padding: 0;
         text-align: center;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
       }
@@ -224,9 +229,6 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
         zoomControl: true,
         attributionControl: true,
       });
-
-      // Exposed for Playwright verification in production.
-      (window as Window & { __travelYuLeafletMap?: LeafletMap }).__travelYuLeafletMap = map;
 
       mapInstanceRef.current = map;
 
