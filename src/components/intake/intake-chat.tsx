@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
 import { INTAKE_FIELDS } from "@/lib/constants";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -320,6 +321,13 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     return requiredFields.filter((field) => isFieldCompleted(field, userOnlyConversationText)).length;
   }, [requiredFields, userOnlyConversationText]);
 
+  const modeToggleHref = useMemo(() => {
+    const nextMode = mode === "surprise" ? "standard" : "surprise";
+    return `/trip/new/intake?mode=${nextMode}&tripId=${encodeURIComponent(tripId)}`;
+  }, [mode, tripId]);
+
+  const modeToggleLabel = mode === "surprise" ? "Pindah ke Standard Mode" : "Pindah ke Surprise Me";
+
   const progress = Math.round((completed / requiredFields.length) * 100);
 
   const send = async () => {
@@ -455,6 +463,14 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
         <p className="mt-1 text-xs text-[var(--text-soft)]">
           Mode: {mode === "surprise" ? "Surprise Me (AI pilih destinasi)" : "Standard (destinasi dari kamu)"}
         </p>
+        <div className="mt-2">
+          <Link
+            href={modeToggleHref}
+            className="inline-flex items-center rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-semibold text-[var(--text-soft)] transition hover:bg-[var(--bg-alt)]"
+          >
+            {modeToggleLabel}
+          </Link>
+        </div>
 
         <div className="mt-4 h-[380px] overflow-y-auto rounded-[1.2rem] border border-slate-200/70 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-3">
           {messages.length === 0 ? (
