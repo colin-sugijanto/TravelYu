@@ -16,7 +16,7 @@ export const maxDuration = 300;
 
 const LOCAL_TIMEOUT_MS = 600_000;
 const VERCEL_TIMEOUT_MS = 240_000;
-const GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS = 60_000;
+const GENERATE_OBJECT_ATTEMPT_TIMEOUT_MS = 180_000;
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
@@ -930,6 +930,81 @@ function deplaceholderizeGenerated(
   };
 }
 
+function buildBestEffortGeneratedItinerary(
+  targetDays: number,
+  intakeData: Record<string, unknown>,
+  selectedOptionContext: {
+    destinationHighlights: string[];
+    title: string;
+    estimatedBudgetIdr: number | null;
+  },
+): z.infer<typeof generatedItinerarySchema> {
+  const fallbackDestinationRaw =
+    (typeof intakeData.where === "string" && intakeData.where.trim().length > 0
+      ? intakeData.where
+      : selectedOptionContext.destinationHighlights[0] ?? selectedOptionContext.title) ||
+    "Destinasi Indonesia";
+  const fallbackDestination = fallbackDestinationRaw.trim();
+
+  const pace = typeof intakeData.pacing === "string" ? intakeData.pacing.toLowerCase() : "balanced";
+  const includeNight = pace.includes("padat") || pace.includes("packed");
+  const dailySlots: Array<(typeof TIME_SLOTS)[number]> = includeNight
+    ? ["morning", "afternoon", "evening", "night"]
+    : ["morning", "afternoon", "evening"];
+
+  const items: z.infer<typeof generatedItinerarySchema>["items"] = [];
+
+  for (let day = 1; day <= targetDays; day += 1) {
+    for (const slot of dailySlots) {
+      const isArrivalNightStay = day === 1 && slot === "evening";
+      const activityType: z.infer<typeof generatedItinerarySchema>["items"][number]["activityType"] =
+        isArrivalNightStay
+          ? "accommodation"
+          : slot === "afternoon"
+            ? "dining"
+            : slot === "night"
+              ? "rest"
+              : "experience";
+
+      const title =
+        activityType === "accommodation"
+          ? `Check-in akomodasi di ${fallbackDestination}`
+          : activityType === "dining"
+            ? `Kuliner lokal ${fallbackDestination}`
+            : activityType === "rest"
+              ? `Waktu istirahat di ${fallbackDestination}`
+              : `Eksplorasi ${fallbackDestination}`;
+
+      const estCostIdr =
+        activityType === "accommodation"
+          ? 850000
+          : activityType === "dining"
+            ? 150000
+            : activityType === "rest"
+              ? 0
+              : 220000;
+
+      items.push({
+        day,
+        timeSlot: slot,
+        activityType,
+        title,
+        description: `${title}. Jadwal ini dibuat otomatis sebagai fallback agar itinerary tetap tersedia dan bisa kamu edit di AI Editor.`,
+        estCostIdr,
+        locationAddress: fallbackDestination,
+        source: "web_search",
+      });
+    }
+  }
+
+  const summed = items.reduce((acc, item) => acc + item.estCostIdr, 0);
+
+  return {
+    totalEstCostIdr: Math.max(0, Math.floor(selectedOptionContext.estimatedBudgetIdr ?? summed)),
+    items,
+  };
+}
+
 function extractJsonCandidateFromText(text: string): unknown {
   const direct = extractObjectFromText(text);
   if (direct !== null) return direct;
@@ -1500,9 +1575,22 @@ ${JSON.stringify(generated)}`;
           generated = deplaceholderizeGenerated(generated);
 
           if (hasGenericPlaceholderContent(generated.items)) {
-            throw new Error("AI returned generic placeholder itinerary content");
+            console.warn(
+              `[generate-trip] Generic placeholders remain after deplaceholderization for trip ${body.tripId}; proceeding with best-effort content.`,
+            );
           }
         }
+      }
+
+      if (generated.items.length < 1) {
+        console.warn(
+          `[generate-trip] Model returned empty itinerary for trip ${body.tripId}; building deterministic fallback itinerary.`,
+        );
+        generated = buildBestEffortGeneratedItinerary(targetDays, intakeData, {
+          destinationHighlights: selectedOptionContext.destinationHighlights,
+          title: selectedOptionContext.title,
+          estimatedBudgetIdr: selectedOptionContext.estimatedBudgetIdr,
+        });
       }
 
       generated = enrichGeneratedWithVendorData(generated, relevantVendors as VendorMatchCandidate[] | null | undefined);

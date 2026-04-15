@@ -62,10 +62,14 @@ function extractIntakeParams(text: string): IntakeProgressPayload {
   );
   if (whoMatch) payload.who = whoMatch[0];
 
-  const detectedVibes = VIBE_KEYWORDS.filter((keyword) => normalized.includes(keyword));
+  const detectedVibes = VIBE_KEYWORDS.filter((keyword) =>
+    normalized.includes(keyword),
+  );
   if (detectedVibes.length > 0) payload.vibe = detectedVibes.join(", ");
 
-  const destination = DESTINATION_KEYWORDS.find((keyword) => normalized.includes(keyword));
+  const destination = DESTINATION_KEYWORDS.find((keyword) =>
+    normalized.includes(keyword),
+  );
   if (destination) payload.where = destination;
 
   const whenMatch = normalized.match(
@@ -73,14 +77,22 @@ function extractIntakeParams(text: string): IntakeProgressPayload {
   );
   if (whenMatch) payload.when = whenMatch[0];
 
-  const budgetMatch = normalized.match(/(?:rp\.?\s*)?(\d+(?:[.,]\d+)*)\s*(?:juta|ribu|k|rb)/i);
+  const budgetMatch = normalized.match(
+    /(?:rp\.?\s*)?(\d+(?:[.,]\d+)*)\s*(?:juta|ribu|k|rb)/i,
+  );
   if (budgetMatch) payload.budget = budgetMatch[0];
 
   if (/\b(santai|pelan|slow)\b/i.test(normalized)) payload.pacing = "slow";
-  else if (/\b(padat|packed|banyak)\b/i.test(normalized)) payload.pacing = "packed";
-  else if (/\b(balanced|seimbang)\b/i.test(normalized)) payload.pacing = "balanced";
+  else if (/\b(padat|packed|banyak)\b/i.test(normalized))
+    payload.pacing = "packed";
+  else if (/\b(balanced|seimbang)\b/i.test(normalized))
+    payload.pacing = "balanced";
 
-  if (/\b(vegetarian|vegan|halal|alergi|aksesibilitas|kursi roda|disabilitas|lansia|anak kecil)\b/i.test(normalized)) {
+  if (
+    /\b(vegetarian|vegan|halal|alergi|aksesibilitas|kursi roda|disabilitas|lansia|anak kecil)\b/i.test(
+      normalized,
+    )
+  ) {
     payload.specialNeeds = "ada";
   } else if (/\b(tidak ada|ga ada|gak ada|none)\b/i.test(normalized)) {
     payload.specialNeeds = "tidak ada";
@@ -106,9 +118,7 @@ const FIELD_PATTERNS: Record<string, RegExp[]> = {
     /\b(where|tujuan|destinasi|ke\s+[a-z])\b/i,
     /\b(bali|lombok|yogyakarta|jogja|jakarta|bandung|surabaya|nusa penida|komodo|raja ampat|labuan bajo)\b/i,
   ],
-  budget: [
-    /\b(budget|anggaran|biaya|rp\s?\d|juta|ribu)\b/i,
-  ],
+  budget: [/\b(budget|anggaran|biaya|rp\s?\d|juta|ribu)\b/i],
   pacing: [
     /\b(pacing|ritme|tempo|pelan|santai|padat|2-3 aktivitas|itinerary)\b/i,
   ],
@@ -118,7 +128,9 @@ const FIELD_PATTERNS: Record<string, RegExp[]> = {
   ],
 };
 
-function hasAssistantCompletionSignal(messageTexts: Array<{ role: "assistant" | "user"; text: string }>) {
+function hasAssistantCompletionSignal(
+  messageTexts: Array<{ role: "assistant" | "user"; text: string }>,
+) {
   return messageTexts.some((message) => {
     if (message.role !== "assistant") return false;
 
@@ -129,7 +141,9 @@ function hasAssistantCompletionSignal(messageTexts: Array<{ role: "assistant" | 
     return (
       /intake\s+selesai/.test(normalized) ||
       /semua\s+parameter\s+sudah\s+lengkap/.test(normalized) ||
-      /lanjut(kan)?\s+ke\s+opsi\s+(trip\s+)?(comparison|perbandingan)/.test(normalized) ||
+      /lanjut(kan)?\s+ke\s+opsi\s+(trip\s+)?(comparison|perbandingan)/.test(
+        normalized,
+      ) ||
       /opsi\s+(trip\s+)?(comparison|perbandingan)/.test(normalized) ||
       /bersiap\s+untuk\s+memberikan\s+opsi/.test(normalized)
     );
@@ -160,7 +174,8 @@ function toDisplayText(text: string) {
     .replace(/\r\n/g, "\n")
     .trim();
 
-  const inlineBulletCount = (formatted.match(/\s-\s(?=[A-Za-z0-9(])/g) ?? []).length;
+  const inlineBulletCount = (formatted.match(/\s-\s(?=[A-Za-z0-9(])/g) ?? [])
+    .length;
   if (!formatted.includes("\n- ") && inlineBulletCount >= 2) {
     formatted = formatted.replace(/\s-\s(?=[A-Za-z0-9(])/g, "\n- ");
   }
@@ -178,7 +193,9 @@ function normalizeMessages(
   }>,
 ) {
   return messages
-    .filter((message) => message.role === "assistant" || message.role === "user")
+    .filter(
+      (message) => message.role === "assistant" || message.role === "user",
+    )
     .map((message) => ({
       ...message,
       role: message.role as "assistant" | "user",
@@ -201,7 +218,10 @@ const FIELD_LABELS: Record<string, string> = {
   specialNeeds: "Kebutuhan Khusus",
 };
 
-const REQUIRED_FIELDS_BY_MODE: Record<"standard" | "surprise", readonly string[]> = {
+const REQUIRED_FIELDS_BY_MODE: Record<
+  "standard" | "surprise",
+  readonly string[]
+> = {
   standard: INTAKE_FIELDS,
   surprise: ["who", "when", "budget", "pacing", "specialNeeds"],
 };
@@ -224,7 +244,11 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "intake",
-            messages: msgs.map((m) => ({ id: m.id, role: m.role, parts: m.parts })),
+            messages: msgs.map((m) => ({
+              id: m.id,
+              role: m.role,
+              parts: m.parts,
+            })),
           }),
         });
       } catch {
@@ -248,12 +272,28 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   });
 
   useEffect(() => {
+    if (!chatLoaded) return;
+
+    const id = window.setTimeout(() => {
+      void saveMessages(messages);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(id);
+    };
+  }, [chatLoaded, messages, saveMessages]);
+
+  useEffect(() => {
     let cancelled = false;
     fetch(`/api/trip/${encodeURIComponent(tripId)}/chat-history?type=intake`)
       .then(async (res) => {
         if (!res.ok) return;
         const data = (await res.json()) as { messages?: UIMessage[] };
-        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+        if (
+          !cancelled &&
+          Array.isArray(data.messages) &&
+          data.messages.length > 0
+        ) {
           setMessages(data.messages as UIMessage[]);
         }
       })
@@ -285,11 +325,20 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     [normalizedMessages],
   );
 
-  const tokenDetectedComplete = useMemo(() => hasAssistantCompletionSignal(messageTexts), [messageTexts]);
+  const tokenDetectedComplete = useMemo(
+    () => hasAssistantCompletionSignal(messageTexts),
+    [messageTexts],
+  );
 
   const isIntakeCompleted = tokenDetectedComplete || serverIntakeComplete;
 
-  const flattenedText = useMemo(() => messageTexts.map((message) => stripControlTokens(message.text)).join("\n"), [messageTexts]);
+  const flattenedText = useMemo(
+    () =>
+      messageTexts
+        .map((message) => stripControlTokens(message.text))
+        .join("\n"),
+    [messageTexts],
+  );
 
   const userOnlyConversationText = useMemo(
     () =>
@@ -318,7 +367,9 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   }, [flattenedText, messageTexts]);
 
   const completed = useMemo(() => {
-    return requiredFields.filter((field) => isFieldCompleted(field, userOnlyConversationText)).length;
+    return requiredFields.filter((field) =>
+      isFieldCompleted(field, userOnlyConversationText),
+    ).length;
   }, [requiredFields, userOnlyConversationText]);
 
   const modeToggleHref = useMemo(() => {
@@ -326,7 +377,8 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     return `/trip/new/intake?mode=${nextMode}&tripId=${encodeURIComponent(tripId)}`;
   }, [mode, tripId]);
 
-  const modeToggleLabel = mode === "surprise" ? "Pindah ke Standard Mode" : "Pindah ke Surprise Me";
+  const modeToggleLabel =
+    mode === "surprise" ? "Pindah ke Standard Mode" : "Pindah ke Surprise Me";
 
   const progress = Math.round((completed / requiredFields.length) * 100);
 
@@ -355,8 +407,13 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       });
 
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        setCompareError(payload?.error ?? "Gagal membuat opsi comparison. Coba kirim 1 pesan konfirmasi lagi.");
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setCompareError(
+          payload?.error ??
+            "Gagal membuat opsi comparison. Coba kirim 1 pesan konfirmasi lagi.",
+        );
         return;
       }
 
@@ -389,7 +446,12 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [intakeProgressPayload, serverIntakeComplete, tripId, userOnlyConversationText]);
+  }, [
+    intakeProgressPayload,
+    serverIntakeComplete,
+    tripId,
+    userOnlyConversationText,
+  ]);
 
   useEffect(() => {
     if (tokenDetectedComplete) {
@@ -431,7 +493,14 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [isLoading, messageTexts, mode, tokenDetectedComplete, tripId, userOnlyConversationText]);
+  }, [
+    isLoading,
+    messageTexts,
+    mode,
+    tokenDetectedComplete,
+    tripId,
+    userOnlyConversationText,
+  ]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -445,8 +514,8 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
           <CardTitle>AI Intake Agent</CardTitle>
-          <div className="mt-4 h-[380px] flex items-center justify-center">
-            <p className="text-sm text-[var(--text-soft)]">Memuat riwayat chat...</p>
+          <div className="mt-4 h-95 flex items-center justify-center">
+            <p className="text-sm text-(--text-soft)">Memuat riwayat chat...</p>
           </div>
         </Card>
         <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
@@ -460,21 +529,24 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
         <CardTitle>AI Intake Agent</CardTitle>
-        <p className="mt-1 text-xs text-[var(--text-soft)]">
-          Mode: {mode === "surprise" ? "Surprise Me (AI pilih destinasi)" : "Standard (destinasi dari kamu)"}
+        <p className="mt-1 text-xs text-(--text-soft)">
+          Mode:{" "}
+          {mode === "surprise"
+            ? "Surprise Me (AI pilih destinasi)"
+            : "Standard (destinasi dari kamu)"}
         </p>
         <div className="mt-2">
           <Link
             href={modeToggleHref}
-            className="inline-flex items-center rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-semibold text-[var(--text-soft)] transition hover:bg-[var(--bg-alt)]"
+            className="inline-flex items-center rounded-full border border-(--border) bg-white px-3 py-1 text-xs font-semibold text-(--text-soft) transition hover:bg-(--bg-alt)"
           >
             {modeToggleLabel}
           </Link>
         </div>
 
-        <div className="mt-4 h-[380px] overflow-y-auto rounded-[1.2rem] border border-slate-200/70 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-3">
+        <div className="mt-4 h-95 overflow-y-auto rounded-[1.2rem] border border-slate-200/70 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-3">
           {messages.length === 0 ? (
-            <p className="text-sm text-[var(--text-soft)]">
+            <p className="text-sm text-(--text-soft)">
               {mode === "surprise"
                 ? "Halo! Surprise mode aktif. Ceritakan dulu siapa yang ikut dan tanggal trip-nya."
                 : "Halo! Kita mulai dari siapa yang ikut trip ini?"}
@@ -486,7 +558,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
                   key={message.id}
                   className={
                     message.role === "user"
-                      ? "rounded-xl bg-[var(--brand-blue-soft)] p-2 text-sm text-blue-900"
+                      ? "rounded-xl bg-(--brand-blue-soft) p-2 text-sm text-blue-900"
                       : "rounded-xl border border-slate-200/70 bg-white p-2 text-sm"
                   }
                 >
@@ -509,33 +581,39 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
           className="mt-3 flex gap-2"
         >
           <input
-            className="h-11 flex-1 rounded-full border border-[var(--border)] bg-white px-4 text-sm outline-none transition-all focus:border-[var(--brand)] focus:ring-2 focus:ring-[rgba(249,115,22,0.2)]"
+            className="h-11 flex-1 rounded-full border border-(--border) bg-white px-4 text-sm outline-none transition-all focus:border-(--brand) focus:ring-2 focus:ring-[rgba(249,115,22,0.2)]"
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder={mode === "surprise" ? "Contoh: berdua, awal Juli, budget 12 juta" : "Tulis jawaban kamu..."}
+            placeholder={
+              mode === "surprise"
+                ? "Contoh: berdua, awal Juli, budget 12 juta"
+                : "Tulis jawaban kamu..."
+            }
           />
           <button
             type="submit"
-            className="h-11 rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white shadow-[0_14px_24px_-16px_rgba(249,115,22,0.7)] transition hover:bg-[var(--brand-strong)]"
+            className="h-11 rounded-full bg-(--brand) px-4 text-sm font-semibold text-white shadow-[0_14px_24px_-16px_rgba(249,115,22,0.7)] transition hover:bg-(--brand-strong)"
             disabled={isLoading}
           >
             {isLoading ? "..." : "Kirim"}
           </button>
         </form>
 
-        <p className="mt-2 text-xs text-[var(--text-soft)]">
+        <p className="mt-2 text-xs text-(--text-soft)">
           {isIntakeCompleted
             ? "Intake selesai. Opsi trip akan diproses otomatis."
             : "Lanjut ke comparison akan aktif otomatis setelah AI menutup intake."}
         </p>
 
-        {compareError ? <p className="mt-2 text-xs text-[var(--danger)]">{compareError}</p> : null}
+        {compareError ? (
+          <p className="mt-2 text-xs text-(--danger)">{compareError}</p>
+        ) : null}
 
         <button
           type="button"
           onClick={generateOptions}
           disabled={isGeneratingOptions || !isIntakeCompleted}
-          className="mt-3 h-10 w-full rounded-full border border-[var(--border)] bg-white text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--bg-alt)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-3 h-10 w-full rounded-full border border-(--border) bg-white text-sm font-semibold text-foreground transition hover:bg-(--bg-alt) disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isGeneratingOptions
             ? "Menyiapkan opsi..."
@@ -547,17 +625,28 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
 
       <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
         <CardTitle>Progres Parameter</CardTitle>
-        <p className="mt-2 text-sm text-[var(--text-soft)]">
+        <p className="mt-2 text-sm text-(--text-soft)">
           {completed} / {requiredFields.length} parameter terkumpul
         </p>
         <Progress className="mt-3" value={progress} />
         <div className="mt-4 space-y-2 text-sm">
           {requiredFields.map((field) => {
-              const done = isFieldCompleted(field, userOnlyConversationText);
+            const done = isFieldCompleted(field, userOnlyConversationText);
             return (
-               <div key={field} className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-[var(--bg-alt)] px-3 py-2">
-                <span className="capitalize">{FIELD_LABELS[field] ?? field}</span>
-                <span className={done ? "text-[var(--brand-strong)]" : "text-[var(--text-soft)]"}>{done ? "Selesai" : "Menunggu"}</span>
+              <div
+                key={field}
+                className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-(--bg-alt) px-3 py-2"
+              >
+                <span className="capitalize">
+                  {FIELD_LABELS[field] ?? field}
+                </span>
+                <span
+                  className={
+                    done ? "text-(--brand-strong)" : "text-(--text-soft)"
+                  }
+                >
+                  {done ? "Selesai" : "Menunggu"}
+                </span>
               </div>
             );
           })}
