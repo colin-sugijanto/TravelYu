@@ -42,7 +42,7 @@ Key variables:
 - `GOOGLE_AI_STUDIO_API_KEY`
 - `GOOGLE_AI_STUDIO_MODEL` (optional override, default: `gemini-3.1-flash-lite-preview`)
 - `OPENROUTER_API_KEY` (for chat box/intake/editor experiences)
-- `OPENROUTER_MODEL` (optional override, default: `openrouter/free`)
+- `OPENROUTER_MODEL` (optional override, default: `nvidia/nemotron-3-super-120b-a12b:free`)
 - `TRAVELYU_INTERNAL_API_TOKEN`
 - `N8N_NOTIFICATION_WEBHOOK_URL`
 - `N8N_NOTIFICATION_WEBHOOK_TOKEN`

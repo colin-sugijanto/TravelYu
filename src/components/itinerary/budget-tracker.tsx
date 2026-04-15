@@ -22,14 +22,18 @@ export function BudgetTracker({ totalBudgetIdr, items }: BudgetTrackerProps) {
     return (
       <Card className="p-5">
         <CardTitle>Budget Tracker</CardTitle>
-        <CardText className="mt-2">Budget akan muncul setelah itinerary berhasil digenerate.</CardText>
+        <CardText className="mt-2">
+          Budget akan muncul setelah itinerary berhasil digenerate.
+        </CardText>
       </Card>
     );
   }
 
   const spent = items.reduce((sum, item) => sum + item.est_cost_idr, 0);
   const left = Math.max(0, totalBudgetIdr - spent);
-  const usedPercent = totalBudgetIdr ? Math.round((spent / totalBudgetIdr) * 100) : 0;
+  const usedPercent = totalBudgetIdr
+    ? Math.round((spent / totalBudgetIdr) * 100)
+    : 0;
 
   const byCategory = items.reduce<Record<string, number>>((acc, item) => {
     const key = categoryMap[item.activity_type];
@@ -40,22 +44,29 @@ export function BudgetTracker({ totalBudgetIdr, items }: BudgetTrackerProps) {
   return (
     <Card className="p-5">
       <CardTitle>Budget Tracker</CardTitle>
-      <div className="mt-3 rounded-xl bg-[var(--bg-alt)] p-3">
+      <div className="mt-3 rounded-xl bg-(--bg-alt) p-3">
         <div className="flex items-center justify-between text-sm">
           <span>Total Budget</span>
           <span className="font-semibold">{formatIdr(totalBudgetIdr)}</span>
         </div>
         <div className="mt-1 flex items-center justify-between text-sm">
           <span>Remaining</span>
-          <span className="font-semibold text-[var(--brand-strong)]">{formatIdr(left)}</span>
+          <span className="font-semibold text-(--brand-strong)">
+            {formatIdr(left)}
+          </span>
         </div>
         <Progress className="mt-3" value={usedPercent} />
-        <CardText className="mt-2 text-xs">Used {usedPercent}% dari budget trip</CardText>
+        <CardText className="mt-2 text-xs">
+          Used {usedPercent}% dari budget trip
+        </CardText>
       </div>
 
       <div className="mt-3 space-y-2">
         {Object.entries(byCategory).map(([category, value]) => (
-          <div key={category} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm">
+          <div
+            key={category}
+            className="flex items-center justify-between rounded-lg border border-(--border) bg-white px-3 py-2 text-sm"
+          >
             <span>{category}</span>
             <span className="font-medium">{formatIdr(value)}</span>
           </div>

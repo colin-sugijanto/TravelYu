@@ -50,7 +50,9 @@ function toText(value: unknown) {
 
 function renderToolSuccessSummary(toolName: string, result: ToolResult) {
   if (toolName === "search_alternatives") {
-    const alternatives = Array.isArray(result.alternatives) ? result.alternatives : [];
+    const alternatives = Array.isArray(result.alternatives)
+      ? result.alternatives
+      : [];
     return alternatives.length > 0
       ? `✅ Ditemukan ${alternatives.length} alternatif.`
       : "✅ Tidak ada alternatif yang cocok saat ini.";
@@ -148,7 +150,8 @@ function renderMessageParts(parts: MessagePart[]) {
 
     if (isToolPart && toolInvocation) {
       const inv = toolInvocation;
-      const isRunning = inv.state === "call" || inv.state === "running" || !inv.result;
+      const isRunning =
+        inv.state === "call" || inv.state === "running" || !inv.result;
       const isOk = inv.result?.ok === true;
       return (
         <div key={idx} className="mt-2 space-y-1">
@@ -178,7 +181,10 @@ function renderMessageParts(parts: MessagePart[]) {
 
     if (part.errorText && part.errorText.trim()) {
       return (
-        <p key={idx} className="whitespace-pre-line text-sm leading-relaxed text-red-700">
+        <p
+          key={idx}
+          className="whitespace-pre-line text-sm leading-relaxed text-red-700"
+        >
           ❌ {part.errorText.trim()}
         </p>
       );
@@ -198,11 +204,7 @@ function renderMessageParts(parts: MessagePart[]) {
   return rendered.filter((node) => node !== null);
 }
 
-export function EditorChat({
-  tripId,
-}: {
-  tripId: string;
-}) {
+export function EditorChat({ tripId }: { tripId: string }) {
   const router = useRouter();
   const [input, setInput] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -226,7 +228,11 @@ export function EditorChat({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "editor",
-            messages: msgs.map((m) => ({ id: m.id, role: m.role, parts: m.parts })),
+            messages: msgs.map((m) => ({
+              id: m.id,
+              role: m.role,
+              parts: m.parts,
+            })),
           }),
         });
       } catch {
@@ -242,7 +248,11 @@ export function EditorChat({
       .then(async (res) => {
         if (!res.ok) return;
         const data = (await res.json()) as { messages?: UIMessage[] };
-        if (!cancelled && Array.isArray(data.messages) && data.messages.length > 0) {
+        if (
+          !cancelled &&
+          Array.isArray(data.messages) &&
+          data.messages.length > 0
+        ) {
           setMessages(data.messages as UIMessage[]);
         }
       })
@@ -266,22 +276,23 @@ export function EditorChat({
 
   if (!loaded) {
     return (
-      <Card className="flex h-[540px] flex-col p-4">
+      <Card className="flex h-135 flex-col p-4">
         <CardTitle>AI Editor</CardTitle>
         <div className="mt-3 flex-1 flex items-center justify-center">
-          <p className="text-sm text-[var(--text-soft)]">Memuat riwayat chat...</p>
+          <p className="text-sm text-(--text-soft)">Memuat riwayat chat...</p>
         </div>
       </Card>
     );
   }
 
   return (
-    <Card className="flex h-[540px] flex-col p-4">
+    <Card className="flex h-135 flex-col p-4">
       <CardTitle>AI Editor</CardTitle>
-      <div className="mt-3 flex-1 space-y-3 overflow-y-auto rounded-xl bg-[var(--bg-alt)] p-3">
+      <div className="mt-3 flex-1 space-y-3 overflow-y-auto rounded-xl bg-(--bg-alt) p-3">
         {messages.length === 0 ? (
-          <p className="text-sm text-[var(--text-soft)]">
-            Contoh: &quot;Tukar resto hari 2 ke opsi vegetarian lebih dekat&quot;
+          <p className="text-sm text-(--text-soft)">
+            Contoh: &quot;Tukar resto hari 2 ke opsi vegetarian lebih
+            dekat&quot;
           </p>
         ) : (
           messages
@@ -291,8 +302,13 @@ export function EditorChat({
               const rendered = renderMessageParts(parts);
               if (message.role === "assistant" && rendered.length === 0) {
                 return (
-                  <div key={message.id} className="rounded-xl bg-white p-2.5 shadow-sm">
-                    <p className="text-sm text-[var(--text-soft)]">Perubahan sedang diproses.</p>
+                  <div
+                    key={message.id}
+                    className="rounded-xl bg-white p-2.5 shadow-sm"
+                  >
+                    <p className="text-sm text-(--text-soft)">
+                      Perubahan sedang diproses.
+                    </p>
                   </div>
                 );
               }
@@ -306,7 +322,12 @@ export function EditorChat({
                   }
                 >
                   {message.role === "user" ? (
-                    <p className="text-sm">{String((message.parts?.[0] as MessagePart | undefined)?.text ?? "")}</p>
+                    <p className="text-sm">
+                      {String(
+                        (message.parts?.[0] as MessagePart | undefined)?.text ??
+                          "",
+                      )}
+                    </p>
                   ) : (
                     <div className="space-y-1">{rendered}</div>
                   )}
@@ -323,14 +344,14 @@ export function EditorChat({
         className="mt-3 flex gap-2"
       >
         <input
-          className="h-10 flex-1 rounded-full border border-[var(--border)] bg-white px-4 text-sm outline-none focus:border-[var(--brand)]"
+          className="h-10 flex-1 rounded-full border border-(--border) bg-white px-4 text-sm outline-none focus:border-(--brand)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Edit itinerary..."
         />
         <button
           type="submit"
-          className="rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:opacity-60"
+          className="rounded-full bg-(--brand) px-4 text-sm font-semibold text-white transition hover:bg-(--brand-strong) disabled:opacity-60"
           disabled={isLoading}
         >
           {isLoading ? "…" : "Send"}
