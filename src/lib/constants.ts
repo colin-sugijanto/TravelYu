@@ -1,6 +1,6 @@
 export const APP_NAME = "TravelYu!";
 
-export const OPENROUTER_CHAT_MODEL = "stepfun/step-3.5-flash:free";
+export const OPENROUTER_CHAT_MODEL = "openrouter/free";
 
 export const GOOGLE_AI_STUDIO_MODEL = "gemini-3.1-flash-lite-preview";
 
