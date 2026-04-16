@@ -4,6 +4,7 @@ import { getCurrentAppUser } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
 import { model } from "@/lib/ai/openrouter";
 import { checkAiRateLimit } from "@/lib/rate-limit";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const INTAKE_SYSTEM_PROMPT = `
 Kamu adalah TravelYu AI, asisten perencanaan perjalanan domestik Indonesia yang hangat dan responsif.
@@ -76,10 +77,32 @@ export async function POST(request: Request) {
     return blocked;
   }
 
-  const { messages, mode } = (await request.json()) as {
+  const { messages, mode, tripId } = (await request.json()) as {
     messages: unknown;
     mode?: "standard" | "surprise";
+    tripId?: string;
   };
+
+  let resolvedMode: "standard" | "surprise" = mode === "surprise" ? "surprise" : "standard";
+
+  if (tripId && typeof tripId === "string") {
+    const { data: trip } = await supabaseAdmin
+      .from("trips")
+      .select("user_id,intake_data")
+      .eq("id", tripId)
+      .maybeSingle();
+
+    if (trip && trip.user_id === appUser.id) {
+      const intakeData =
+        trip.intake_data && typeof trip.intake_data === "object"
+          ? (trip.intake_data as Record<string, unknown>)
+          : null;
+
+      if (typeof intakeData?.is_surprise_mode === "boolean") {
+        resolvedMode = intakeData.is_surprise_mode ? "surprise" : "standard";
+      }
+    }
+  }
 
   const modelMessages = await toModelMessages(messages);
 
@@ -87,8 +110,8 @@ export async function POST(request: Request) {
     model,
     maxRetries: 2,
     system: `${INTAKE_SYSTEM_PROMPT}
-Mode trip saat ini: ${mode === "surprise" ? "Surprise Me" : "Standard"}.
-${mode === "surprise" ? SURPRISE_MODE_APPENDIX : STANDARD_MODE_APPENDIX}`,
+Mode trip saat ini: ${resolvedMode === "surprise" ? "Surprise Me" : "Standard"}.
+${resolvedMode === "surprise" ? SURPRISE_MODE_APPENDIX : STANDARD_MODE_APPENDIX}`,
     messages: modelMessages,
   });
 

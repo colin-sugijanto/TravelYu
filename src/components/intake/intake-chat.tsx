@@ -236,6 +236,7 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   const [compareError, setCompareError] = useState<string | null>(null);
   const [serverIntakeComplete, setServerIntakeComplete] = useState(false);
   const autoAdvanceTriggeredRef = useRef(false);
+  const messageContainerRef = useRef<HTMLDivElement | null>(null);
   const [chatLoaded, setChatLoaded] = useState(false);
 
   const saveMessages = useCallback(
@@ -284,6 +285,16 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       window.clearTimeout(id);
     };
   }, [chatLoaded, messages, saveMessages]);
+
+  useEffect(() => {
+    const container = messageContainerRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: status === "streaming" ? "smooth" : "auto",
+    });
+  }, [messages, status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -546,7 +557,10 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
           </Link>
         </div>
 
-        <div className="mt-4 h-95 overflow-y-auto rounded-[1.2rem] border border-slate-200/70 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-3">
+        <div
+          ref={messageContainerRef}
+          className="mt-4 h-95 overflow-y-auto rounded-[1.2rem] border border-slate-200/70 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] p-3"
+        >
           {messages.length === 0 ? (
             <p className="text-sm text-(--text-soft)">
               {mode === "surprise"
