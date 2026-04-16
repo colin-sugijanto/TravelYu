@@ -361,6 +361,79 @@ function attachCoordinatesFromKnownAddresses(
   };
 }
 
+function inferCityFromContext(input: {
+  intakeData: Record<string, unknown>;
+  selectedOptionContext: { destinationHighlights: string[]; title: string };
+}) {
+  const candidates = [
+    typeof input.intakeData.where === "string" ? input.intakeData.where : "",
+    input.selectedOptionContext.title,
+    ...(input.selectedOptionContext.destinationHighlights ?? []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (candidates.includes("ubud") || candidates.includes("bali")) return "Bali";
+  if (candidates.includes("yogyakarta") || candidates.includes("jogja")) return "Yogyakarta";
+  if (candidates.includes("lombok") || candidates.includes("gili")) return "Lombok";
+  if (candidates.includes("labuan bajo") || candidates.includes("komodo")) return "Labuan Bajo";
+  if (candidates.includes("raja ampat")) return "Raja Ampat";
+  if (candidates.includes("bandung")) return "Bandung";
+  if (candidates.includes("jakarta")) return "Jakarta";
+  if (candidates.includes("surabaya")) return "Surabaya";
+
+  return "Bali";
+}
+
+function getCityCenterLatLng(city: string) {
+  switch (city) {
+    case "Yogyakarta":
+      return { lat: -7.7956, lng: 110.3695 };
+    case "Lombok":
+      return { lat: -8.6500, lng: 116.3249 };
+    case "Labuan Bajo":
+      return { lat: -8.4961, lng: 119.8877 };
+    case "Raja Ampat":
+      return { lat: -0.4246, lng: 130.8170 };
+    case "Bandung":
+      return { lat: -6.9175, lng: 107.6191 };
+    case "Jakarta":
+      return { lat: -6.2088, lng: 106.8456 };
+    case "Surabaya":
+      return { lat: -7.2575, lng: 112.7521 };
+    default:
+      return { lat: -8.4095, lng: 115.1889 }; // Bali
+  }
+}
+
+function ensureLocationCoordinates(
+  generated: z.infer<typeof generatedItinerarySchema>,
+  destinationCity: string,
+) {
+  const center = getCityCenterLatLng(destinationCity);
+
+  const items = generated.items.map((item, index) => {
+    const hasCoords = typeof item.locationLat === "number" && typeof item.locationLng === "number";
+    if (hasCoords) return item;
+
+    const jitter = ((index % 5) - 2) * 0.012;
+    return {
+      ...item,
+      locationAddress: item.locationAddress
+        ? item.locationAddress
+        : `${item.title}, ${destinationCity}, Indonesia`,
+      locationLat: center.lat + jitter,
+      locationLng: center.lng - jitter,
+    };
+  });
+
+  return {
+    ...generated,
+    items,
+  };
+}
+
 function isSearchResultsUrl(value: string) {
   try {
     const parsed = new URL(value);
@@ -1773,6 +1846,14 @@ ${JSON.stringify(generated)}`;
 
       generated = enrichGeneratedWithVendorData(generated, relevantVendors as VendorMatchCandidate[] | null | undefined);
       generated = attachCoordinatesFromKnownAddresses(generated, relevantVendors as VendorMatchCandidate[] | null | undefined);
+      const destinationCity = inferCityFromContext({
+        intakeData,
+        selectedOptionContext: {
+          destinationHighlights: selectedOptionContext.destinationHighlights,
+          title: selectedOptionContext.title,
+        },
+      });
+      generated = ensureLocationCoordinates(generated, destinationCity);
 
       saveItineraryResult = await persistGeneratedItinerary(toPersistPayload(body.tripId, generated));
       console.log(

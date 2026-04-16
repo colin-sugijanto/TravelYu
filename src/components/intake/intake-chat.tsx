@@ -135,18 +135,7 @@ function hasAssistantCompletionSignal(
     if (message.role !== "assistant") return false;
 
     const text = message.text;
-    if (text.includes(INTAKE_COMPLETE_TOKEN)) return true;
-
-    const normalized = stripControlTokens(text).toLowerCase();
-    return (
-      /intake\s+selesai/.test(normalized) ||
-      /semua\s+parameter\s+sudah\s+lengkap/.test(normalized) ||
-      /lanjut(kan)?\s+ke\s+opsi\s+(trip\s+)?(comparison|perbandingan)/.test(
-        normalized,
-      ) ||
-      /opsi\s+(trip\s+)?(comparison|perbandingan)/.test(normalized) ||
-      /bersiap\s+untuk\s+memberikan\s+opsi/.test(normalized)
-    );
+    return text.includes(INTAKE_COMPLETE_TOKEN);
   });
 }
 
@@ -325,13 +314,6 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
     [normalizedMessages],
   );
 
-  const tokenDetectedComplete = useMemo(
-    () => hasAssistantCompletionSignal(messageTexts),
-    [messageTexts],
-  );
-
-  const isIntakeCompleted = tokenDetectedComplete || serverIntakeComplete;
-
   const flattenedText = useMemo(
     () =>
       messageTexts
@@ -371,6 +353,13 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
       isFieldCompleted(field, userOnlyConversationText),
     ).length;
   }, [requiredFields, userOnlyConversationText]);
+
+  const tokenDetectedComplete = useMemo(() => {
+    if (completed < requiredFields.length) return false;
+    return hasAssistantCompletionSignal(messageTexts);
+  }, [completed, messageTexts, requiredFields.length]);
+
+  const isIntakeCompleted = serverIntakeComplete || tokenDetectedComplete;
 
   const modeToggleHref = useMemo(() => {
     const nextMode = mode === "surprise" ? "standard" : "surprise";
