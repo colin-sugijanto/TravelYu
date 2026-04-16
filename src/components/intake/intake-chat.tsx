@@ -124,7 +124,7 @@ const FIELD_PATTERNS: Record<string, RegExp[]> = {
   ],
   specialNeeds: [
     /\b(special\s*needs?|kebutuhan\s*khusus|preferensi\s*khusus|aksesibilitas|disabilitas)\b/i,
-    /\b(halal|lift|kursi\s*roda|alergi|vegetarian|vegan|ramah\s*anak)\b/i,
+    /\b(halal|lift|kursi\s*roda|alergi|vegetarian|vegan|ramah\s*anak|tidak\s*ada|ga\s*ada|gak\s*ada|none)\b/i,
   ],
 };
 
@@ -142,6 +142,11 @@ function hasAssistantCompletionSignal(
 function isFieldCompleted(field: string, content: string) {
   const patterns = FIELD_PATTERNS[field] ?? [];
   return patterns.some((pattern) => pattern.test(content));
+}
+
+function isFieldCompletedByPayload(field: string, payload: IntakeProgressPayload) {
+  const value = payload[field as keyof IntakeProgressPayload];
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function extractTextFromParts(parts: Array<{ type: string; text?: string }>) {
@@ -373,10 +378,12 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   }, [flattenedText, messageTexts]);
 
   const completed = useMemo(() => {
-    return requiredFields.filter((field) =>
-      isFieldCompleted(field, userOnlyConversationText),
+    return requiredFields.filter(
+      (field) =>
+        isFieldCompleted(field, userOnlyConversationText) ||
+        isFieldCompletedByPayload(field, intakeProgressPayload),
     ).length;
-  }, [requiredFields, userOnlyConversationText]);
+  }, [intakeProgressPayload, requiredFields, userOnlyConversationText]);
 
   const tokenDetectedComplete = useMemo(() => {
     if (completed < requiredFields.length) return false;
@@ -647,7 +654,9 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
         <Progress className="mt-3" value={progress} />
         <div className="mt-4 space-y-2 text-sm">
           {requiredFields.map((field) => {
-            const done = isFieldCompleted(field, userOnlyConversationText);
+              const done =
+                isFieldCompleted(field, userOnlyConversationText) ||
+                isFieldCompletedByPayload(field, intakeProgressPayload);
             return (
               <div
                 key={field}

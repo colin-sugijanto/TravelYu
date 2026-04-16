@@ -87,13 +87,6 @@ export async function POST(
     return Response.json({ complete: false, missingParams: [...requiredFields], summary: "" });
   }
 
-  const normalized = conversationHistory.toLowerCase();
-  const hasUserConfirmation =
-    /\b(oke|ok|ya|yap|setuju|benar|bener|lanjut|gas|sip|siap|confirm|konfirmasi)\b/.test(normalized);
-  if (!hasUserConfirmation) {
-    return Response.json({ complete: false, missingParams: [...requiredFields], summary: "" });
-  }
-
   const sampled = conversationHistory.slice(0, 5000);
   const missingParams = requiredFields.filter((field) => !isFieldCompleted(field, sampled));
 
