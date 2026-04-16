@@ -28,3 +28,7 @@ export const hasConfiguredAiProvider = hasGoogleAiStudioKey || hasOpenRouterKey;
 export const model = hasGoogleAiStudioKey
   ? googleAiStudio.chat(googleModelId)
   : openrouter.chat(openRouterGenerationModel);
+
+export const openRouterGenerationFallbackModel = hasOpenRouterKey
+  ? openrouter.chat(openRouterGenerationModel)
+  : null;

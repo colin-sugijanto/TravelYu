@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentAppUser } from "@/lib/auth";
-import { model, hasConfiguredAiProvider } from "@/lib/ai/provider";
+import { model, hasConfiguredAiProvider, openRouterGenerationFallbackModel } from "@/lib/ai/provider";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
@@ -854,6 +854,44 @@ function toPersistPayload(
   };
 }
 
+function isServiceUnavailableError(error: unknown): boolean {
+  if (!isRecord(error)) return false;
+
+  const statusCode = typeof error.statusCode === "number" ? error.statusCode : undefined;
+  if (statusCode === 503) return true;
+
+  const responseBody = typeof error.responseBody === "string" ? error.responseBody.toLowerCase() : "";
+  if (
+    responseBody.includes('"code":503') ||
+    responseBody.includes("service unavailable") ||
+    responseBody.includes("status\":\"unavailable") ||
+    responseBody.includes("currently experiencing high demand")
+  ) {
+    return true;
+  }
+
+  const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+  if (message.includes("503") || message.includes("service unavailable") || message.includes("unavailable")) {
+    return true;
+  }
+
+  if (Array.isArray(error.errors)) {
+    for (const nested of error.errors) {
+      if (isServiceUnavailableError(nested)) return true;
+    }
+  }
+
+  if (isRecord(error.lastError) && isServiceUnavailableError(error.lastError)) {
+    return true;
+  }
+
+  if (isRecord(error.cause) && isServiceUnavailableError(error.cause)) {
+    return true;
+  }
+
+  return false;
+}
+
 function hasGenericPlaceholderContent(items: Array<{ title: string; description: string }>): boolean {
   if (items.length < 1) return true;
 
@@ -1043,6 +1081,30 @@ async function runWithHardTimeout<T>(
     return await Promise.race([run(), hardTimeoutPromise]);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function runGenerationWithOptionalModelFallback<T>(
+  runPrimary: (activeModel: typeof model) => Promise<T>,
+  runFallback: ((activeModel: typeof model) => Promise<T>) | null,
+): Promise<T> {
+  try {
+    return await runPrimary(model);
+  } catch (primaryError) {
+    if (!runFallback || !openRouterGenerationFallbackModel) {
+      throw primaryError;
+    }
+
+    if (!isServiceUnavailableError(primaryError) && !isRateLimitedError(primaryError)) {
+      throw primaryError;
+    }
+
+    console.warn(
+      "[generate-trip] Primary AI provider unavailable/rate-limited. Retrying generation with OpenRouter fallback model.",
+      primaryError,
+    );
+
+    return runFallback(openRouterGenerationFallbackModel);
   }
 }
 
@@ -1349,18 +1411,35 @@ For items not in the vendor list, set source='web_search'.
       let generated: z.infer<typeof generatedItinerarySchema>;
       try {
         try {
-            const primary = await runWithHardTimeout(
-              "primary generation",
-              () =>
-                generateObject({
-                  model,
-                  maxRetries: 1,
-                  abortSignal: controller.signal,
-                  system: GENERATION_SYSTEM_PROMPT,
-                  prompt: basePrompt,
-                  schema: generatedItinerarySchema,
-                }),
-              () => controller.abort(),
+            const primary = await runGenerationWithOptionalModelFallback(
+              (activeModel) =>
+                runWithHardTimeout(
+                  "primary generation",
+                  () =>
+                    generateObject({
+                      model: activeModel,
+                      maxRetries: 1,
+                      abortSignal: controller.signal,
+                      system: GENERATION_SYSTEM_PROMPT,
+                      prompt: basePrompt,
+                      schema: generatedItinerarySchema,
+                    }),
+                  () => controller.abort(),
+                ),
+              (activeModel) =>
+                runWithHardTimeout(
+                  "primary generation (openrouter fallback)",
+                  () =>
+                    generateObject({
+                      model: activeModel,
+                      maxRetries: 1,
+                      abortSignal: controller.signal,
+                      system: GENERATION_SYSTEM_PROMPT,
+                      prompt: basePrompt,
+                      schema: generatedItinerarySchema,
+                    }),
+                  () => controller.abort(),
+                ),
             );
             generated = primary.object;
         } catch (primaryError) {
@@ -1393,18 +1472,35 @@ Chosen option: ${JSON.stringify(selectedOptionContext)}
 Destination vendors:\n${vendorContext}`;
 
             try {
-              const fallback = await runWithHardTimeout(
-                "compact generation",
-                () =>
-                  generateObject({
-                    model,
-                    maxRetries: 0,
-                    abortSignal: controller.signal,
-                    system: COMPACT_SYSTEM_PROMPT,
-                    prompt: compactPrompt,
-                    schema: generatedItinerarySchema,
-                  }),
-                () => controller.abort(),
+              const fallback = await runGenerationWithOptionalModelFallback(
+                (activeModel) =>
+                  runWithHardTimeout(
+                    "compact generation",
+                    () =>
+                      generateObject({
+                        model: activeModel,
+                        maxRetries: 0,
+                        abortSignal: controller.signal,
+                        system: COMPACT_SYSTEM_PROMPT,
+                        prompt: compactPrompt,
+                        schema: generatedItinerarySchema,
+                      }),
+                    () => controller.abort(),
+                  ),
+                (activeModel) =>
+                  runWithHardTimeout(
+                    "compact generation (openrouter fallback)",
+                    () =>
+                      generateObject({
+                        model: activeModel,
+                        maxRetries: 0,
+                        abortSignal: controller.signal,
+                        system: COMPACT_SYSTEM_PROMPT,
+                        prompt: compactPrompt,
+                        schema: generatedItinerarySchema,
+                      }),
+                    () => controller.abort(),
+                  ),
               );
               generated = fallback.object;
             } catch (fallbackError) {
@@ -1438,17 +1534,33 @@ Target trip duration: ${targetDays} days
 Verified vendors (if available):
 ${vendorContext}`;
 
-                const textFallback = await runWithHardTimeout(
-                  "text json fallback generation",
-                  () =>
-                    generateText({
-                      model,
-                      maxRetries: 0,
-                      abortSignal: controller.signal,
-                      system: textFallbackSystemPrompt,
-                      prompt: textFallbackPrompt,
-                    }),
-                  () => controller.abort(),
+                const textFallback = await runGenerationWithOptionalModelFallback(
+                  (activeModel) =>
+                    runWithHardTimeout(
+                      "text json fallback generation",
+                      () =>
+                        generateText({
+                          model: activeModel,
+                          maxRetries: 0,
+                          abortSignal: controller.signal,
+                          system: textFallbackSystemPrompt,
+                          prompt: textFallbackPrompt,
+                        }),
+                      () => controller.abort(),
+                    ),
+                  (activeModel) =>
+                    runWithHardTimeout(
+                      "text json fallback generation (openrouter fallback)",
+                      () =>
+                        generateText({
+                          model: activeModel,
+                          maxRetries: 0,
+                          abortSignal: controller.signal,
+                          system: textFallbackSystemPrompt,
+                          prompt: textFallbackPrompt,
+                        }),
+                      () => controller.abort(),
+                    ),
                 );
 
                 const parsedFromText = extractJsonCandidateFromText(textFallback.text);
@@ -1468,18 +1580,35 @@ ${vendorContext}`;
           const retryPrompt = `${basePrompt}\n\nIMPORTANT QUALITY GUARDRAIL:\n- Never use generic placeholders like \"Aktivitas Day X\" or \"Rencana Aktivitas Day X\".\n- Every title must be specific to a real place, venue, or activity in Indonesia.\n- Every description must mention concrete details for that activity.`;
 
           try {
-            const retry = await runWithHardTimeout(
-              "quality retry generation",
-              () =>
-                generateObject({
-                  model,
-                  maxRetries: 0,
-                  abortSignal: controller.signal,
-                  system: GENERATION_SYSTEM_PROMPT,
-                  prompt: retryPrompt,
-                  schema: generatedItinerarySchema,
-                }),
-              () => controller.abort(),
+            const retry = await runGenerationWithOptionalModelFallback(
+              (activeModel) =>
+                runWithHardTimeout(
+                  "quality retry generation",
+                  () =>
+                    generateObject({
+                      model: activeModel,
+                      maxRetries: 0,
+                      abortSignal: controller.signal,
+                      system: GENERATION_SYSTEM_PROMPT,
+                      prompt: retryPrompt,
+                      schema: generatedItinerarySchema,
+                    }),
+                  () => controller.abort(),
+                ),
+              (activeModel) =>
+                runWithHardTimeout(
+                  "quality retry generation (openrouter fallback)",
+                  () =>
+                    generateObject({
+                      model: activeModel,
+                      maxRetries: 0,
+                      abortSignal: controller.signal,
+                      system: GENERATION_SYSTEM_PROMPT,
+                      prompt: retryPrompt,
+                      schema: generatedItinerarySchema,
+                    }),
+                  () => controller.abort(),
+                ),
             );
 
             generated = retry.object;
@@ -1508,17 +1637,33 @@ Verified vendors:
 ${vendorContext}`;
 
           try {
-            const textRetry = await runWithHardTimeout(
-              "placeholder text regeneration",
-              () =>
-                generateText({
-                  model,
-                  maxRetries: 0,
-                  abortSignal: controller.signal,
-                  system: textRegenerationSystemPrompt,
-                  prompt: textRegenerationPrompt,
-                }),
-              () => controller.abort(),
+            const textRetry = await runGenerationWithOptionalModelFallback(
+              (activeModel) =>
+                runWithHardTimeout(
+                  "placeholder text regeneration",
+                  () =>
+                    generateText({
+                      model: activeModel,
+                      maxRetries: 0,
+                      abortSignal: controller.signal,
+                      system: textRegenerationSystemPrompt,
+                      prompt: textRegenerationPrompt,
+                    }),
+                  () => controller.abort(),
+                ),
+              (activeModel) =>
+                runWithHardTimeout(
+                  "placeholder text regeneration (openrouter fallback)",
+                  () =>
+                    generateText({
+                      model: activeModel,
+                      maxRetries: 0,
+                      abortSignal: controller.signal,
+                      system: textRegenerationSystemPrompt,
+                      prompt: textRegenerationPrompt,
+                    }),
+                  () => controller.abort(),
+                ),
             );
 
             const parsedRetryText = extractJsonCandidateFromText(textRetry.text);
@@ -1550,18 +1695,35 @@ Current generated itinerary JSON:
 ${JSON.stringify(generated)}`;
 
           try {
-            const rewritten = await runWithHardTimeout(
-              "placeholder rewrite generation",
-              () =>
-                generateObject({
-                  model,
-                  maxRetries: 0,
-                  abortSignal: controller.signal,
-                  system: rewriteSystemPrompt,
-                  prompt: rewritePrompt,
-                  schema: generatedItinerarySchema,
-                }),
-              () => controller.abort(),
+            const rewritten = await runGenerationWithOptionalModelFallback(
+              (activeModel) =>
+                runWithHardTimeout(
+                  "placeholder rewrite generation",
+                  () =>
+                    generateObject({
+                      model: activeModel,
+                      maxRetries: 0,
+                      abortSignal: controller.signal,
+                      system: rewriteSystemPrompt,
+                      prompt: rewritePrompt,
+                      schema: generatedItinerarySchema,
+                    }),
+                  () => controller.abort(),
+                ),
+              (activeModel) =>
+                runWithHardTimeout(
+                  "placeholder rewrite generation (openrouter fallback)",
+                  () =>
+                    generateObject({
+                      model: activeModel,
+                      maxRetries: 0,
+                      abortSignal: controller.signal,
+                      system: rewriteSystemPrompt,
+                      prompt: rewritePrompt,
+                      schema: generatedItinerarySchema,
+                    }),
+                  () => controller.abort(),
+                ),
             );
 
             if (!hasGenericPlaceholderContent(rewritten.object.items)) {
