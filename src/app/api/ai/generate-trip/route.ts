@@ -1348,35 +1348,36 @@ For items not in the vendor list, set source='web_search'.
 
       let generated: z.infer<typeof generatedItinerarySchema>;
       try {
-          const primary = await runWithHardTimeout(
-            "primary generation",
-            () =>
-              generateObject({
-                model,
-                maxRetries: 1,
-                abortSignal: controller.signal,
-                system: GENERATION_SYSTEM_PROMPT,
-                prompt: basePrompt,
-                schema: generatedItinerarySchema,
-              }),
-            () => controller.abort(),
-          );
-          generated = primary.object;
-      } catch (primaryError) {
-        const recoveredFromPrimary = recoverGeneratedItineraryFromError(primaryError);
-        if (recoveredFromPrimary) {
-          console.warn(
-            `[generate-trip] Recovered schema-mismatched primary response for trip ${body.tripId}; continuing without compact retry.`,
-          );
-          generated = recoveredFromPrimary;
-        } else {
-          if (isRateLimitedError(primaryError)) {
-            throw primaryError;
-          }
+        try {
+            const primary = await runWithHardTimeout(
+              "primary generation",
+              () =>
+                generateObject({
+                  model,
+                  maxRetries: 1,
+                  abortSignal: controller.signal,
+                  system: GENERATION_SYSTEM_PROMPT,
+                  prompt: basePrompt,
+                  schema: generatedItinerarySchema,
+                }),
+              () => controller.abort(),
+            );
+            generated = primary.object;
+        } catch (primaryError) {
+          const recoveredFromPrimary = recoverGeneratedItineraryFromError(primaryError);
+          if (recoveredFromPrimary) {
+            console.warn(
+              `[generate-trip] Recovered schema-mismatched primary response for trip ${body.tripId}; continuing without compact retry.`,
+            );
+            generated = recoveredFromPrimary;
+          } else {
+            if (isRateLimitedError(primaryError)) {
+              throw primaryError;
+            }
 
-          console.warn(`[generate-trip] Primary AI generation failed for trip ${body.tripId}. Retrying with compact prompt.`, primaryError);
+            console.warn(`[generate-trip] Primary AI generation failed for trip ${body.tripId}. Retrying with compact prompt.`, primaryError);
 
-          const COMPACT_SYSTEM_PROMPT = `Generate practical Indonesian trip itineraries in valid structured output.
+            const COMPACT_SYSTEM_PROMPT = `Generate practical Indonesian trip itineraries in valid structured output.
 Rules:
 - Return one JSON object with top-level keys EXACTLY: totalEstCostIdr and items.
 - Do not return days array, trip_id, or snake_case top-level keys.
@@ -1386,40 +1387,40 @@ Rules:
 - Include dining at least in afternoon and night every day.
 - Use realistic 2026 IDR prices and keep descriptions concise.`;
 
-          const compactPrompt = `Trip ID: ${body.tripId}
+            const compactPrompt = `Trip ID: ${body.tripId}
 Intake: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
 Chosen option: ${JSON.stringify(selectedOptionContext)}
 Destination vendors:\n${vendorContext}`;
 
-          try {
-            const fallback = await runWithHardTimeout(
-              "compact generation",
-              () =>
-                generateObject({
-                  model,
-                  maxRetries: 0,
-                  abortSignal: controller.signal,
-                  system: COMPACT_SYSTEM_PROMPT,
-                  prompt: compactPrompt,
-                  schema: generatedItinerarySchema,
-                }),
-              () => controller.abort(),
-            );
-            generated = fallback.object;
-          } catch (fallbackError) {
-            const recoveredFromFallback = recoverGeneratedItineraryFromError(fallbackError);
-            if (recoveredFromFallback) {
-              console.warn(
-                `[generate-trip] Recovered schema-mismatched compact response for trip ${body.tripId}; proceeding with normalized payload.`,
+            try {
+              const fallback = await runWithHardTimeout(
+                "compact generation",
+                () =>
+                  generateObject({
+                    model,
+                    maxRetries: 0,
+                    abortSignal: controller.signal,
+                    system: COMPACT_SYSTEM_PROMPT,
+                    prompt: compactPrompt,
+                    schema: generatedItinerarySchema,
+                  }),
+                () => controller.abort(),
               );
-              generated = recoveredFromFallback;
-            } else {
-              console.warn(
-                `[generate-trip] Compact generation failed for trip ${body.tripId}. Retrying with text JSON fallback.`,
-                fallbackError,
-              );
+              generated = fallback.object;
+            } catch (fallbackError) {
+              const recoveredFromFallback = recoverGeneratedItineraryFromError(fallbackError);
+              if (recoveredFromFallback) {
+                console.warn(
+                  `[generate-trip] Recovered schema-mismatched compact response for trip ${body.tripId}; proceeding with normalized payload.`,
+                );
+                generated = recoveredFromFallback;
+              } else {
+                console.warn(
+                  `[generate-trip] Compact generation failed for trip ${body.tripId}. Retrying with text JSON fallback.`,
+                  fallbackError,
+                );
 
-              const textFallbackSystemPrompt = `Generate Indonesian travel itinerary in strict JSON only.
+                const textFallbackSystemPrompt = `Generate Indonesian travel itinerary in strict JSON only.
 Rules:
 - Output exactly one JSON object.
 - Top-level keys must be: totalEstCostIdr, items.
@@ -1430,39 +1431,39 @@ Rules:
 - Use concrete places/activities in Indonesia and realistic 2026 IDR prices.
 - Never use generic placeholders like Aktivitas Day X.`;
 
-              const textFallbackPrompt = `Trip ID: ${body.tripId}
+                const textFallbackPrompt = `Trip ID: ${body.tripId}
 Intake data: ${sanitizeForPrompt(intakeData as Record<string, unknown>)}
 Selected option details: ${JSON.stringify(selectedOptionContext)}
 Target trip duration: ${targetDays} days
 Verified vendors (if available):
 ${vendorContext}`;
 
-              const textFallback = await runWithHardTimeout(
-                "text json fallback generation",
-                () =>
-                  generateText({
-                    model,
-                    maxRetries: 0,
-                    abortSignal: controller.signal,
-                    system: textFallbackSystemPrompt,
-                    prompt: textFallbackPrompt,
-                  }),
-                () => controller.abort(),
-              );
+                const textFallback = await runWithHardTimeout(
+                  "text json fallback generation",
+                  () =>
+                    generateText({
+                      model,
+                      maxRetries: 0,
+                      abortSignal: controller.signal,
+                      system: textFallbackSystemPrompt,
+                      prompt: textFallbackPrompt,
+                    }),
+                  () => controller.abort(),
+                );
 
-              const parsedFromText = extractJsonCandidateFromText(textFallback.text);
-              const normalizedFromText = normalizeRecoveredGeneratedItinerary(parsedFromText);
-              if (!normalizedFromText) {
-                throw fallbackError;
+                const parsedFromText = extractJsonCandidateFromText(textFallback.text);
+                const normalizedFromText = normalizeRecoveredGeneratedItinerary(parsedFromText);
+                if (!normalizedFromText) {
+                  throw fallbackError;
+                }
+
+                generated = normalizedFromText;
               }
-
-              generated = normalizedFromText;
             }
           }
         }
-      }
 
-      if (generated.items.length > 0) {
+        if (generated.items.length > 0) {
         if (hasGenericPlaceholderContent(generated.items)) {
           const retryPrompt = `${basePrompt}\n\nIMPORTANT QUALITY GUARDRAIL:\n- Never use generic placeholders like \"Aktivitas Day X\" or \"Rencana Aktivitas Day X\".\n- Every title must be specific to a real place, venue, or activity in Indonesia.\n- Every description must mention concrete details for that activity.`;
 
@@ -1580,11 +1581,26 @@ ${JSON.stringify(generated)}`;
             );
           }
         }
-      }
+        }
 
-      if (generated.items.length < 1) {
+        if (generated.items.length < 1) {
+          console.warn(
+            `[generate-trip] Model returned empty itinerary for trip ${body.tripId}; building deterministic fallback itinerary.`,
+          );
+          generated = buildBestEffortGeneratedItinerary(targetDays, intakeData, {
+            destinationHighlights: selectedOptionContext.destinationHighlights,
+            title: selectedOptionContext.title,
+            estimatedBudgetIdr: selectedOptionContext.estimatedBudgetIdr,
+          });
+        }
+      } catch (generationError) {
+        if (isRateLimitedError(generationError)) {
+          throw generationError;
+        }
+
         console.warn(
-          `[generate-trip] Model returned empty itinerary for trip ${body.tripId}; building deterministic fallback itinerary.`,
+          `[generate-trip] All generation attempts failed for trip ${body.tripId}; using deterministic fallback itinerary.`,
+          generationError,
         );
         generated = buildBestEffortGeneratedItinerary(targetDays, intakeData, {
           destinationHighlights: selectedOptionContext.destinationHighlights,
