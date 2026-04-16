@@ -171,6 +171,19 @@ function toDisplayText(text: string) {
 
   formatted = formatted.replace(/\n{3,}/g, "\n\n");
 
+  const normalized = formatted.toLowerCase();
+  const looksLikeMetaPromptLeak =
+    normalized.includes("we need to follow instructions") ||
+    normalized.includes("output only") ||
+    normalized.includes("without additional context") ||
+    normalized.includes("specified phrase") ||
+    normalized.includes("strictly adhered") ||
+    normalized.includes("prompt-injection");
+
+  if (looksLikeMetaPromptLeak) {
+    return "Siap, aku catat. Lanjut ya, kapan tanggal/periode trip kamu?";
+  }
+
   return formatted.trim();
 }
 
