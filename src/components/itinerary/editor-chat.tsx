@@ -53,9 +53,25 @@ function renderToolSuccessSummary(toolName: string, result: ToolResult) {
     const alternatives = Array.isArray(result.alternatives)
       ? result.alternatives
       : [];
-    return alternatives.length > 0
-      ? `✅ Ditemukan ${alternatives.length} alternatif.`
-      : "✅ Tidak ada alternatif yang cocok saat ini.";
+    if (alternatives.length === 0) {
+      return "✅ Tidak ada alternatif yang cocok saat ini.";
+    }
+
+    const lines = alternatives
+      .slice(0, 5)
+      .map((alt, index) => {
+        const name = typeof alt?.name === "string" ? alt.name : `Opsi ${index + 1}`;
+        const city = typeof alt?.city === "string" ? alt.city : null;
+        const rating = typeof alt?.avg_rating === "number" ? `${alt.avg_rating}/5` : null;
+        const price = typeof alt?.price_tier === "string" ? alt.price_tier : null;
+        const url = typeof alt?.url === "string" ? alt.url : null;
+        const meta = [city, rating, price].filter(Boolean).join(" · ");
+        const titleLine = `${index + 1}) ${name}${meta ? ` (${meta})` : ""}`;
+        return url ? `${titleLine}\n   ${url}` : titleLine;
+      })
+      .join("\n\n");
+
+    return `✅ Ditemukan ${alternatives.length} alternatif.\n\n${lines}\n\nBalas dengan: \"Pilih opsi #\"`;
   }
 
   if (toolName === "get_weather_info") {
@@ -164,7 +180,7 @@ function renderMessageParts(parts: MessagePart[]) {
           {/* Result */}
           {inv.result !== undefined && (
             <div
-              className={`rounded-lg border px-3 py-2 text-xs ${
+              className={`rounded-lg border px-3 py-2 text-xs whitespace-pre-line ${
                 isOk
                   ? "border-green-200 bg-green-50 text-green-700"
                   : "border-red-200 bg-red-50 text-red-700"

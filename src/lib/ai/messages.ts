@@ -26,12 +26,90 @@ function isUiMessage(value: unknown): value is UIMessage {
   );
 }
 
+type ToolInvocationLike = {
+  toolName?: string;
+  result?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  state?: string;
+};
+
+type UiMessagePart = {
+  type?: string;
+  text?: string;
+  toolInvocation?: ToolInvocationLike;
+  toolName?: string;
+  result?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  state?: string;
+};
+
+function getToolResult(part: UiMessagePart) {
+  const invocation = part.toolInvocation;
+  if (invocation?.toolName && (invocation.result || invocation.output)) {
+    return {
+      toolName: invocation.toolName,
+      result: (invocation.result ?? invocation.output) as Record<string, unknown>,
+    };
+  }
+
+  const type = typeof part.type === "string" ? part.type : "";
+  if (type.startsWith("tool-")) {
+    const inferredToolName = part.toolName ?? type.replace(/^tool-/, "");
+    const result = (part.result ?? part.output) as Record<string, unknown> | undefined;
+    if (inferredToolName && result) {
+      return { toolName: inferredToolName, result };
+    }
+  }
+
+  if (part.toolName && (part.result || part.output)) {
+    return {
+      toolName: part.toolName,
+      result: (part.result ?? part.output) as Record<string, unknown>,
+    };
+  }
+
+  return null;
+}
+
+function formatToolResultText(toolName: string, result: Record<string, unknown>) {
+  if (toolName === "search_alternatives") {
+    const alternatives = Array.isArray(result.alternatives)
+      ? (result.alternatives as Array<Record<string, unknown>>)
+      : [];
+    if (alternatives.length === 0) return "Alternatif: (tidak ada)";
+
+    const lines = alternatives.slice(0, 5).map((alt, index) => {
+      const name = typeof alt?.name === "string" ? alt.name : `Opsi ${index + 1}`;
+      const city = typeof alt?.city === "string" ? alt.city : null;
+      const url = typeof alt?.url === "string" ? alt.url : null;
+      const meta = [city].filter(Boolean).join(" · ");
+      const titleLine = `${index + 1}) ${name}${meta ? ` (${meta})` : ""}`;
+      return url ? `${titleLine}\n${url}` : titleLine;
+    });
+
+    return `Alternatif:\n${lines.join("\n")}`;
+  }
+
+  return "";
+}
+
 function extractTextFromParts(parts: Array<{ type: string; text?: string }>): string {
-  return parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text ?? "")
-    .join("\n")
-    .trim();
+  const texts: string[] = [];
+
+  for (const part of parts as UiMessagePart[]) {
+    if (part.type === "text") {
+      if (part.text) texts.push(part.text);
+      continue;
+    }
+
+    const toolResult = getToolResult(part);
+    if (toolResult) {
+      const formatted = formatToolResultText(toolResult.toolName, toolResult.result);
+      if (formatted) texts.push(formatted);
+    }
+  }
+
+  return texts.join("\n").trim();
 }
 
 export async function toModelMessages(input: unknown): Promise<ModelMessage[]> {

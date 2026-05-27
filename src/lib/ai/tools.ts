@@ -134,7 +134,7 @@ export function createItineraryTools(context: ItineraryToolContext) {
     add_itinerary_item: {
     description: "Add itinerary item to specific trip day",
     inputSchema: z.object({
-      tripId: z.string(),
+      tripId: z.string().optional(),
       dayNumber: z.number().int().min(1),
       timeSlot: z.enum(["morning", "afternoon", "evening", "night"]),
       activityType: z.enum(["accommodation", "transport", "dining", "attraction", "experience", "rest"]),
@@ -143,7 +143,7 @@ export function createItineraryTools(context: ItineraryToolContext) {
       estCostIdr: z.number().int().min(0),
     }),
     execute: async (input: {
-      tripId: string;
+      tripId?: string;
       dayNumber: number;
       timeSlot: "morning" | "afternoon" | "evening" | "night";
       activityType: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest";
@@ -153,12 +153,13 @@ export function createItineraryTools(context: ItineraryToolContext) {
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
-      if (!isSameTripScope(context, input.tripId)) {
+      const resolvedTripId = input.tripId ?? context.tripId;
+      if (!isSameTripScope(context, resolvedTripId)) {
         return { ok: false, reason: "Forbidden trip scope" };
       }
 
       const { error } = await supabaseAdmin.from("itinerary_items").insert({
-        trip_id: context.tripId,
+        trip_id: resolvedTripId,
         day_number: input.dayNumber,
         time_slot: input.timeSlot,
         sort_order: 99,
@@ -171,8 +172,8 @@ export function createItineraryTools(context: ItineraryToolContext) {
       });
 
       if (!error) {
-        revalidateTag(`trip:${context.tripId}:items`, "max");
-        revalidateTag(`trip:${context.tripId}`, "max");
+        revalidateTag(`trip:${resolvedTripId}:items`, "max");
+        revalidateTag(`trip:${resolvedTripId}`, "max");
       }
 
       return { ok: !error, error: error?.message };
@@ -227,25 +228,26 @@ export function createItineraryTools(context: ItineraryToolContext) {
     flag_for_cs_approval: {
     description: "Queue requested major change for CS approval",
     inputSchema: z.object({
-      tripId: z.string(),
+      tripId: z.string().optional(),
       itemId: z.string().optional(),
       reason: z.string(),
       requestedChange: z.record(z.string(), z.unknown()).optional(),
     }),
     execute: async (input: {
-      tripId: string;
+      tripId?: string;
       itemId?: string;
       reason: string;
       requestedChange?: Record<string, unknown>;
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
-      if (!isSameTripScope(context, input.tripId)) {
+      const resolvedTripId = input.tripId ?? context.tripId;
+      if (!isSameTripScope(context, resolvedTripId)) {
         return { ok: false, reason: "Forbidden trip scope" };
       }
 
       const { error } = await supabaseAdmin.from("cs_approval_queue").insert({
-        trip_id: input.tripId,
+        trip_id: resolvedTripId,
         item_id: input.itemId ?? null,
         requested_change: {
           reason: input.reason,
@@ -256,7 +258,7 @@ export function createItineraryTools(context: ItineraryToolContext) {
 
       if (!error) {
         revalidateTag("admin:metrics", "max");
-        revalidateTag(`trip:${input.tripId}:items`, "max");
+        revalidateTag(`trip:${resolvedTripId}:items`, "max");
       }
 
       return { ok: !error, error: error?.message };
@@ -283,9 +285,16 @@ export function createItineraryTools(context: ItineraryToolContext) {
       }
 
       const searchQuery = input.city ? `${input.query} ${input.city}` : input.query;
+      const normalizedQuery = searchQuery.toLowerCase();
+      const wantsDining = /(resto|restaurant|dinner|lunch|dining|cafe|warung|kuliner|makan)/i.test(normalizedQuery);
+      const placeQuery = wantsDining
+        ? `${searchQuery} restaurant official site`
+        : `${searchQuery} official site`;
+      const tavilyLimit = Math.min(12, Math.max(input.limit * 3, input.limit));
+
       const [internalResult, tavilyResult] = await Promise.allSettled([
         statement.limit(input.limit),
-        searchIndonesiaPlaces(searchQuery, input.limit),
+        searchIndonesiaPlaces(placeQuery, tavilyLimit),
       ]);
 
       const internalAlternatives =
@@ -294,7 +303,27 @@ export function createItineraryTools(context: ItineraryToolContext) {
       const tavilyResults =
         tavilyResult.status === "fulfilled" ? tavilyResult.value : [];
 
-      const webAlternatives = tavilyResults.map((result, index) => ({
+      if (internalAlternatives.length > 0) {
+        return { ok: true, alternatives: internalAlternatives.slice(0, input.limit) };
+      }
+
+      const guidePatterns = /(best|top|guide|list|review|reviews|where to eat|things to do|recommended|recommendations|itinerary|blogs?)/i;
+      const bannedHostPatterns = /(tripadvisor|booking\.com|traveloka|expedia|agoda|yelp|michelin|klook|kkday|facebook\.com|instagram\.com|tiktok\.com|reddit\.com|quora\.com|medium\.com|blogspot\.com)/i;
+      const bannedPathPatterns = /(\/blog\/|\/blogs\/|\/travel|\/article|\/articles|\/posts|\/stories|\/guide|\/category|\/tag|\/news|\/forum|\/forums|\/groups?|\/community|\/list)/i;
+
+      const filteredTavily = tavilyResults.filter((result) => {
+        const title = result.title ?? "";
+        const url = result.url ?? "";
+        const haystack = `${title} ${url}`.toLowerCase();
+        if (guidePatterns.test(title)) return false;
+        if (bannedHostPatterns.test(url)) return false;
+        if (bannedPathPatterns.test(url)) return false;
+        if (/[?]/.test(title)) return false;
+        if (/(best|top|guide|list|review|reviews|where to eat|things to do)/i.test(haystack)) return false;
+        return true;
+      });
+
+      const webAlternatives = filteredTavily.map((result, index) => ({
         id: `web-${index + 1}`,
         name: result.title,
         type: "web_result",
@@ -306,14 +335,15 @@ export function createItineraryTools(context: ItineraryToolContext) {
         source: "web_search",
       }));
 
-      return { ok: true, alternatives: [...internalAlternatives, ...webAlternatives] };
+      const combined = [...webAlternatives];
+      return { ok: true, alternatives: combined.slice(0, input.limit) };
     },
   },
 
     swap_vendor: {
     description: "Swap vendor candidate for item, auto-flag if major/confirmed",
     inputSchema: z.object({
-      tripId: z.string(),
+      tripId: z.string().optional(),
       itemId: z.string(),
       newVendorId: z.string(),
       destinationChanged: z.boolean().optional(),
@@ -321,7 +351,7 @@ export function createItineraryTools(context: ItineraryToolContext) {
       hotelChanged: z.boolean().optional(),
     }),
     execute: async (input: {
-      tripId: string;
+      tripId?: string;
       itemId: string;
       newVendorId: string;
       destinationChanged?: boolean;
@@ -330,7 +360,8 @@ export function createItineraryTools(context: ItineraryToolContext) {
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
-      if (!isSameTripScope(context, input.tripId)) {
+      const resolvedTripId = input.tripId ?? context.tripId;
+      if (!isSameTripScope(context, resolvedTripId)) {
         return { ok: false, reason: "Forbidden trip scope" };
       }
 
@@ -382,13 +413,14 @@ export function createItineraryTools(context: ItineraryToolContext) {
     escalate_to_human_cs: {
     description: "Open CS chat session for traveler",
     inputSchema: z.object({
-      tripId: z.string(),
+      tripId: z.string().optional(),
       message: z.string().optional(),
     }),
-    execute: async (input: { tripId: string; message?: string }) => {
+    execute: async (input: { tripId?: string; message?: string }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
-      if (!isSameTripScope(context, input.tripId)) {
+      const resolvedTripId = input.tripId ?? context.tripId;
+      if (!isSameTripScope(context, resolvedTripId)) {
         return { ok: false, reason: "Forbidden trip scope" };
       }
 
