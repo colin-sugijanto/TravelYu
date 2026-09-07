@@ -3,17 +3,21 @@ import Link from "next/link";
 
 import { BudgetTracker } from "@/components/itinerary/budget-tracker";
 import { EditorChat } from "@/components/itinerary/editor-chat";
+import { ExpenseTracker } from "@/components/itinerary/expense-tracker";
 import { ItineraryMap } from "@/components/itinerary/map";
 import { ItineraryTimeline } from "@/components/itinerary/timeline";
 import { TripLiveChat } from "@/components/trip/live-chat";
 import { TripStatusWatcher } from "@/components/trip/trip-status-watcher";
 import { GeneratingPoller } from "@/components/trip/generating-poller";
+import { TodayMode } from "@/components/trip/today-mode";
 import { TripActionBanner } from "@/components/trip/trip-action-banner";
+import { WrappedCard } from "@/components/trip/wrapped-card";
 import { GeneratingProgressClient } from "@/components/trip/generating-progress";
+import { BookingVault } from "@/components/vault/booking-vault";
 import { Card, CardTitle } from "@/components/ui/card";
 import { WeatherBanner } from "@/components/weather/weather-banner";
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
-import { getItineraryItems, getTripById } from "@/lib/data";
+import { getItineraryItems, getTripBookings, getTripById } from "@/lib/data";
 import { formatTripName } from "@/lib/utils";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
@@ -149,6 +153,23 @@ async function MapSection({ tripId }: { tripId: string }) {
 async function BudgetSection({ tripId, totalBudget }: { tripId: string; totalBudget: number }) {
   const items = await getItineraryItems(tripId);
   return <BudgetTracker totalBudgetIdr={totalBudget} items={items} />;
+}
+
+async function VaultSection({ tripId, canEdit }: { tripId: string; canEdit?: boolean }) {
+  const [items, bookings] = await Promise.all([getItineraryItems(tripId), getTripBookings(tripId)]);
+  if (items.length === 0 && bookings.length === 0) return null;
+  return (
+    <div className="space-y-4">
+      <BookingVault tripId={tripId} items={items} canEdit={canEdit} />
+      <ExpenseTracker tripId={tripId} items={items} canEdit={canEdit} />
+    </div>
+  );
+}
+
+async function TodaySection({ tripId, tripStartDate }: { tripId: string; tripStartDate: string | null }) {
+  const [items, bookings] = await Promise.all([getItineraryItems(tripId), getTripBookings(tripId)]);
+  if (items.length === 0) return null;
+  return <TodayMode tripId={tripId} items={items} bookings={bookings} tripStartDate={tripStartDate} />;
 }
 
 function TimelineSkeleton() {
@@ -404,6 +425,14 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
             </div>
           </Card>
 
+          {trip.status === "active" ? (
+            <Suspense fallback={<PanelSkeleton />}>
+              <TodaySection tripId={trip.id} tripStartDate={trip.trip_start_date ?? null} />
+            </Suspense>
+          ) : null}
+
+          {trip.status === "completed" ? <WrappedCard tripId={trip.id} /> : null}
+
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-4">
               <Suspense fallback={<TimelineSkeleton />}>
@@ -415,6 +444,10 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
 
               <Suspense fallback={<PanelSkeleton />}>
                 <MapSection tripId={trip.id} />
+              </Suspense>
+
+              <Suspense fallback={<PanelSkeleton />}>
+                <VaultSection tripId={trip.id} canEdit={isOwner} />
               </Suspense>
             </div>
 

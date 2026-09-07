@@ -87,6 +87,7 @@ export interface ItineraryItem {
   description: string;
   tips: string | null;
   est_cost_idr: number;
+  actual_cost_idr?: number | null;
   location_lat: number | null;
   location_lng: number | null;
   location_address: string | null;
@@ -96,6 +97,55 @@ export interface ItineraryItem {
   booking_ref: string | null;
   flagged_reason?: string | null;
 }
+
+export type BookingType =
+  | "flight"
+  | "train"
+  | "hotel"
+  | "ferry"
+  | "bus"
+  | "activity"
+  | "other";
+
+export interface TripBooking {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  booking_type: BookingType;
+  provider: string | null;
+  booking_ref: string | null;
+  title: string;
+  origin: string | null;
+  destination: string | null;
+  depart_at: string | null;
+  arrive_at: string | null;
+  check_in: string | null;
+  check_out: string | null;
+  details: Record<string, unknown>;
+  file_url: string | null;
+  linked_item_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ParsedBooking {
+  booking_type: BookingType;
+  provider: string | null;
+  booking_ref: string | null;
+  title: string;
+  origin: string | null;
+  destination: string | null;
+  depart_at: string | null;
+  arrive_at: string | null;
+  check_in: string | null;
+  check_out: string | null;
+  details: Record<string, unknown>;
+  confidence: "high" | "medium" | "low";
+}
+
+export type PlanTier = "free" | "member" | "pro";
+
+export type SubscriptionStatus = "pending" | "active" | "cancelled" | "expired";
 
 export interface UserProfile {
   id: string;
@@ -111,6 +161,32 @@ export interface UserProfile {
   lifetime_points: number;
   loyalty_tier: LoyaltyTier;
   onboarding_completed?: boolean;
+  plan_tier?: PlanTier;
+  ai_credits_balance?: number;
+  ai_credits_quota?: number;
+  ai_credits_period?: string;
+  plan_expires_at?: string | null;
+}
+
+export interface CreditState {
+  planTier: PlanTier;
+  balance: number;
+  quota: number;
+  period: string;
+  expiresAt: string | null;
+}
+
+export interface UserSubscription {
+  id: string;
+  user_id: string;
+  tier: PlanTier;
+  status: SubscriptionStatus;
+  started_at: string | null;
+  expires_at: string | null;
+  auto_renew: boolean;
+  billing_cycle: "monthly" | "yearly";
+  doku_invoice_no: string | null;
+  created_at: string;
 }
 
 export interface VendorSummary {
@@ -130,6 +206,9 @@ export interface TripPhoto {
   public_url?: string;
   caption: string | null;
   uploaded_at: string;
+  itinerary_item_id?: string | null;
+  taken_at?: string | null;
+  day_number?: number | null;
 }
 
 export interface FlaggedQueueItem {

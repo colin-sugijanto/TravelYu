@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ClerkLoaded, ClerkLoading, Show, UserButton } from "@clerk/nextjs";
+import { CreditBadge } from "@/components/credits/credit-badge";
 import { MobileMenu } from "./mobile-menu";
 
 export function AppHeader({ showAdminLink = false }: { showAdminLink?: boolean }) {
@@ -63,6 +64,9 @@ export function AppHeader({ showAdminLink = false }: { showAdminLink?: boolean }
             </Show>
 
             <Show when="signed-in">
+              <div className="hidden sm:block">
+                <CreditBadge />
+              </div>
               <div className="border-l border-slate-200 pl-2 md:pl-4">
                 <UserButton />
               </div>

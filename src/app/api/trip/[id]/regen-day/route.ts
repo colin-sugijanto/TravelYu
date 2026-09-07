@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import { revalidateTag } from "next/cache";
 
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
+import { requireAiCredits } from "@/lib/credits";
 import { model } from "@/lib/ai/openrouter";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { findTripByIdentifier } from "@/lib/trip-access";
@@ -48,6 +49,9 @@ export async function POST(
   if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const creditBlock = await requireAiCredits(appUser.id, "regen-day", { tripId: trip.id });
+  if (creditBlock) return creditBlock;
 
   const intakeData = (trip.intake_data ?? {}) as Record<string, unknown>;
   const destination = String(intakeData.where ?? "Indonesia");

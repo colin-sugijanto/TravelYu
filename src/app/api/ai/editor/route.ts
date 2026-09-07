@@ -4,6 +4,7 @@ import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
 import { createItineraryTools } from "@/lib/ai/tools";
 import { model } from "@/lib/ai/openrouter";
+import { requireAiCredits } from "@/lib/credits";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { getItineraryItems } from "@/lib/data";
 import { findTripByIdentifier, isTripMember } from "@/lib/trip-access";
@@ -134,6 +135,9 @@ export async function POST(request: Request) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
   }
+
+  const creditBlock = await requireAiCredits(appUser.id, "editor", { tripId: trip.id });
+  if (creditBlock) return creditBlock;
 
   const itineraryItems = await getItineraryItems(trip.id);
   const itineraryContext = itineraryItems

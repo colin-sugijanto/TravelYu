@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentAppUser } from "@/lib/auth";
 import { model, hasConfiguredAiProvider, openRouterGenerationFallbackModel } from "@/lib/ai/provider";
 import { parseAiProviderError } from "@/lib/ai/errors";
+import { requireAiCredits } from "@/lib/credits";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -1308,6 +1309,9 @@ export async function POST(request: Request) {
   if (trip.user_id !== appUser.id && appUser.role !== "admin" && appUser.role !== "super_admin") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const creditBlock = await requireAiCredits(appUser.id, "generate-trip", { tripId: trip.id });
+  if (creditBlock) return creditBlock;
 
   await supabaseAdmin
     .from("trips")

@@ -233,10 +233,13 @@ Implemented admin actions:
 
 ### 5.2 AI Endpoints
 
-- `POST /api/ai/intake` - conversational intake,
-- `POST /api/ai/compare-options` - generate + save 3 options,
-- `POST /api/ai/generate-trip` - generate + persist full itinerary,
-- `POST /api/ai/editor` - itinerary editing assistant with tools.
+- `POST /api/ai/intake` - conversational intake (1 credit/message),
+- `POST /api/ai/compare-options` - generate + save 3 options (6 credits),
+- `POST /api/ai/generate-trip` - generate + persist full itinerary (25 credits),
+- `POST /api/ai/editor` - itinerary editing assistant with tools (2 credits/message),
+- `POST /api/ai/parse-booking` - ticket/voucher text parser, AI + deterministic fallback (3 credits).
+
+All AI endpoints enforce per-user AI credit checks first (`402 INSUFFICIENT_CREDITS` + `upgradeUrl: /plans` when empty).
 
 ### 5.3 Editor Tool Surface
 
@@ -255,7 +258,8 @@ Implemented tool calls include:
 
 ### 5.4 Guardrails and Recovery
 
-- AI rate limiting via Upstash,
+- AI rate limiting via Upstash (fails open when Redis is unreachable so AI endpoints keep working),
+- AI credit gating per endpoint with atomic deduct via `consume_ai_credits` RPC,
 - retry strategy on model calls,
 - generation timeout handling + status recovery,
 - itinerary validation before persistence,
@@ -280,19 +284,28 @@ Implemented tool calls include:
 - `trip_photos`
 - `user_points_log`
 - `waha_message_log`
+- `trip_bookings` (ticket locker, migration 014)
+- `subscription_plans`, `user_subscriptions` (tiers + billing history, migration 015)
+- `ai_credit_ledger`, `ai_usage_log` (credit audit + usage analytics, migration 015)
 
 ### 6.2 Key Fields and Schema Additions
 
 - `users.onboarding_completed` (onboarding state),
+- `users.plan_tier`, `users.ai_credits_balance/quota/period`, `users.plan_expires_at` (subscriptions),
 - `trips.trip_start_date`, `trips.trip_end_date` (lifecycle + reminders),
-- `trips.intake_data` stores runtime metadata (including cached packing list).
+- `trips.intake_data` stores runtime metadata (including cached packing list + Today Mode notes),
+- `itinerary_items.actual_cost_idr` (actual-vs-estimated expenses),
+- `trip_photos.itinerary_item_id/taken_at/day_number` (scrapbook photo-to-itinerary linking),
+- `trip_bookings` full ticket detail (type/provider/PNR/origin/destination/times/linked item).
 
 ### 6.3 Functions and Automation
 
 - `apply_points_event` RPC for loyalty transactions,
 - `redeem_planning_points` RPC for redemption,
+- `consume_ai_credits` RPC (atomic deduct + monthly auto-reset + ledger/usage write),
+- `grant_ai_credits` RPC (plan upgrades, adjustments),
 - `set_updated_at` trigger pattern,
-- RLS hardening and Clerk compatibility migrations.
+- RLS hardening and Clerk compatibility migrations (014/015/016, incl. deny-by-default RLS on vault + credit tables).
 
 ### 6.4 Realtime, Storage, and Seeds
 
@@ -348,6 +361,20 @@ Implemented tool calls include:
 - `GET /api/weather/[city]`
 - `GET /api/vendor/[id]`
 
+### 7.6 Travel Vault, Credits, and Subscription APIs
+
+- `POST /api/ai/parse-booking` (ticket/voucher extraction)
+- `GET / POST /api/trip/[id]/bookings`, `DELETE /api/trip/[id]/bookings?bookingId=`
+- `PATCH /api/trip/[id]/items/[itemId]/actual` (actual cost input)
+- `PATCH /api/trip/[id]/photos/[photoId]` (scrapbook day/item linking)
+- `POST /api/trip/[id]/photos-note` (Today Mode quick note)
+- `GET /api/trip/[id]/wrapped` (viral trip summary stats)
+- `GET /api/credits/balance` (plan + balance + recent usage)
+- `GET /api/plans` (public pricing catalog)
+- `POST /api/subscriptions/checkout` (mock-activate in dev; DOKU-pending when gateway env set)
+- `POST /api/subscriptions/webhook` (token-gated activation callback)
+- `PATCH /api/admin/users/[id]/plan` (admin tier override)
+
 ---
 
 ## 8. App Route Structure (Current)
@@ -372,8 +399,9 @@ Implemented tool calls include:
 - `/trip/[id]/packing`
 - `/trip/[id]/memory`
 - `/trip/[id]/review`
-- `/profile`
+- `/profile` (plan + credit status + Digital Passport)
 - `/referral`
+- `/plans` (Free/Member/Pro pricing + checkout)
 
 ### 8.3 Admin Routes
 
@@ -402,6 +430,7 @@ Implemented tool calls include:
 | OpenStreetMap + Leaflet | Map overview rendering |
 | n8n | Email + WhatsApp orchestration via webhook |
 | Upstash Redis | AI endpoint rate limiting |
+| DOKU | Planned subscription payments (checkout pending; mock-activate in dev) |
 
 ### 9.2 Notification Events Implemented in Code
 
@@ -422,9 +451,12 @@ Implemented tool calls include:
 
 - authenticated checks on app routes + API handlers,
 - strict admin role checks for admin pages/endpoints,
-- trip ownership/group membership checks for trip resources,
-- Supabase RLS and hardened migrations,
+- trip ownership/group membership checks for trip resources (bookings/photos/expenses inherit trip access),
+- Supabase RLS and hardened migrations (deny-by-default RLS on vault + credit tables; service_role only),
 - token validation for internal notifications endpoint,
+- `TRAVELYU_INTERNAL_API_TOKEN` required for subscription webhook (503 when unconfigured),
+- atomic credit deduction via RPC (no race on concurrent AI calls),
+- plan-limit enforcement on trip creation, photo uploads, and bookings (402 + upgrade URL),
 
 ### 10.2 Reliability and Failure Handling
 
@@ -432,7 +464,8 @@ Implemented tool calls include:
 - timeout + fallback path in generation,
 - graceful rollback to `intake` on generation failure,
 - non-blocking notification and points dispatch patterns,
-- non-critical weather and intake background calls fail gracefully.
+- non-critical weather and intake background calls fail gracefully,
+- rate limiting fails open when Redis is unreachable (endpoints keep serving).
 
 ### 10.3 Performance and UX
 
@@ -463,7 +496,7 @@ Feature-optional but recommended:
 
 This PRD reflects current implementation. Remaining priorities:
 
-1. Replace payment bypass with production checkout + reconciliation.
+1. Replace payment bypass with production DOKU checkout + reconciliation (mock-activate exists in dev; webhook contract defined).
 2. Improve AI consistency/reliability for long or edge-case itineraries (model strategy + observability).
 3. Upgrade map from static/fallback to richer interactive map UX.
 4. Upgrade PDF export from basic format to branded multi-page output.
@@ -489,7 +522,9 @@ Detailed sequencing remains in `TRAVELYU_IMPLEMENTATION_PLAN.md`.
 - admin approve/complete/flag/chat operations,
 - post-trip reviews/photos/points automation,
 - lifecycle automation via in-app and admin actions,
-- n8n notification event integration.
+- n8n notification event integration,
+- Travel Vault v1 (ticket locker + parser, Today Mode, scrapbook, expenses, Wrapped, Passport),
+- subscription + AI credit system with Free/Member/Pro plans and credit-gated AI.
 
 ### 12.2 Next Delivery Focus
 
@@ -500,5 +535,39 @@ Detailed sequencing remains in `TRAVELYU_IMPLEMENTATION_PLAN.md`.
 
 ---
 
-*TravelYu PRD v1.2 - Internal Product and Engineering Document*  
-*Aligned with repository state and implementation plan progress as of March 2026*
+---
+
+## 13. Subscription and AI Credit System
+
+Single source of truth: `src/lib/plans.ts` (mirrored by `subscription_plans` seed, migration 015).
+
+| Tier | Monthly | Yearly | Credits/mo | Active trips | Photos/trip | Bookings/trip | Group |
+|---|---|---|---|---|---|---|---|
+| Free | Rp0 | Rp0 | 30 (~1 itinerary) | 2 | 10 | 3 | 2 |
+| Member | Rp49rb | Rp390rb | 400 (~10 itineraries) | 20 | 100 | 50 | 6 |
+| Pro | Rp99rb | Rp790rb | 1200 + 20% rollover | 100 | 500 | 200 | 15 |
+
+Credit costs: intake 1/msg, compare 6, generate 25, editor 2, regen-day 5, parse-booking 3, packing 2.
+Credits reset monthly (`ai_credits_period`); deduction is atomic via `consume_ai_credits` RPC with
+ledger (`ai_credit_ledger`) + analytics (`ai_usage_log`) writes. Empty balance returns `402` with an
+upgrade URL. Checkout is mock-activate in dev and DOKU-pending when gateway env is set; production
+DOKU integration remains gap #1. Admin tier override: `PATCH /api/admin/users/[id]/plan`.
+
+---
+
+## 14. Travel Vault (Journeys Home)
+
+Positions TravelYu as the permanent home for past/present/future trips, not just a planner:
+
+- **Reverse planning / booking ingestion**: paste ticket text (Traveloka/Tiket.com/Garuda/Lion/KAI/Agoda) → AI extraction (PNR, times, hotel) → "plan around my bookings" or attach to itinerary items (`trip_bookings`).
+- **Today Mode**: `active` trips switch to a daily-concierge view (today's items, 1-tap PNR/address copy, quick notes).
+- **Memory scrapbook**: photos pinned to day + itinerary item (manual or EXIF `taken_at`), magazine timeline per day.
+- **Actual vs estimated**: per-item actual cost input with savings/overbudget summary.
+- **TravelYu Wrapped**: auto stats card on `completed` trips (days/spots/photos/est vs actual) with share link.
+- **Digital Passport**: profile-level totals (trips, days, provinces via vendors, photos).
+- **Group vault**: bookings/photos inherit `group_trip_members` access (shared ticket locker + photo drop).
+
+---
+
+*TravelYu PRD v1.3 - Internal Product and Engineering Document*  
+*Aligned with repository state as of September 2026 (vault + subscriptions delivered; DOKU pending)*

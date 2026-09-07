@@ -12,6 +12,12 @@ async function createTrip(mode: "standard" | "surprise") {
     return null;
   }
 
+  const { checkTripCreationAllowed } = await import("@/lib/entitlements");
+  const gate = await checkTripCreationAllowed(appUser.id);
+  if (!gate.ok) {
+    return "PLAN_LIMIT" as const;
+  }
+
   const { data, error } = await supabaseAdmin
     .from("trips")
     .insert({
@@ -32,6 +38,9 @@ async function startTrip(mode: "standard" | "surprise") {
   "use server";
 
   const tripId = await createTrip(mode);
+  if (tripId === "PLAN_LIMIT") {
+    redirect("/plans?reason=trip-limit");
+  }
   if (!tripId) {
     redirect(`/login?next=${encodeURIComponent(`/trip/new?mode=${mode}`)}`);
   }

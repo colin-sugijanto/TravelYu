@@ -3,6 +3,7 @@ import { streamText } from "ai";
 import { getCurrentAppUser } from "@/lib/auth";
 import { toModelMessages } from "@/lib/ai/messages";
 import { model } from "@/lib/ai/openrouter";
+import { requireAiCredits } from "@/lib/credits";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -75,6 +76,12 @@ export async function POST(request: Request) {
   if (blocked) {
     return blocked;
   }
+
+  const { tripId: intakeTripId } = (await request.clone().json().catch(() => ({}))) as {
+    tripId?: string;
+  };
+  const creditBlock = await requireAiCredits(appUser.id, "intake", { tripId: intakeTripId });
+  if (creditBlock) return creditBlock;
 
   const { messages, mode, tripId } = (await request.json()) as {
     messages: unknown;

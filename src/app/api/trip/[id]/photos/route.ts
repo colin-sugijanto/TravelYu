@@ -76,6 +76,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
   }
 
+  const { checkPhotoUploadAllowed } = await import("@/lib/entitlements");
+  const photoGate = await checkPhotoUploadAllowed(trip.id, appUser.id);
+  if (!photoGate.ok) {
+    return Response.json({ error: photoGate.error, code: "PLAN_LIMIT", upgradeUrl: "/plans" }, { status: 402 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file");
   const caption = String(formData.get("caption") ?? "").trim();

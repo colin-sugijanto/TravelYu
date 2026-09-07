@@ -59,34 +59,47 @@ export async function checkAiRateLimit(userId: string, scope = "general"): Promi
   const ratelimiter = getScopedRateLimiter(scope);
   if (!ratelimiter) return null;
 
-  const { success, reset } = await ratelimiter.limit(`ai:${scope}:${userId}`);
-  if (success) return null;
+  try {
+    const { success, reset } = await ratelimiter.limit(`ai:${scope}:${userId}`);
+    if (success) return null;
 
-  const retryAfterSeconds = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
+    const retryAfterSeconds = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
 
-  return new Response(JSON.stringify({ error: "Layanan AI sedang sibuk. Mohon tunggu sebentar sebelum mencoba lagi." }), {
-    status: 429,
-    headers: {
-      "Content-Type": "application/json",
-      "Retry-After": String(retryAfterSeconds),
-    },
-  });
+    return new Response(JSON.stringify({ error: "Layanan AI sedang sibuk. Mohon tunggu sebentar sebelum mencoba lagi." }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(retryAfterSeconds),
+      },
+    });
+  } catch (err) {
+    // Rate limiting is non-critical — fail open when Redis is unreachable
+    // (e.g. DNS outage) so AI endpoints keep working.
+    console.error("[rate-limit] Redis unavailable, failing open:", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 export async function checkApiRateLimit(userId: string, scope = "general"): Promise<Response | null> {
   const ratelimiter = getScopedRateLimiter(scope);
   if (!ratelimiter) return null;
 
-  const { success, reset } = await ratelimiter.limit(`api:${scope}:${userId}`);
-  if (success) return null;
+  try {
+    const { success, reset } = await ratelimiter.limit(`api:${scope}:${userId}`);
+    if (success) return null;
 
-  const retryAfterSeconds = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
+    const retryAfterSeconds = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
 
-  return new Response(JSON.stringify({ error: "Terlalu banyak permintaan. Mohon tunggu sejenak." }), {
-    status: 429,
-    headers: {
-      "Content-Type": "application/json",
-      "Retry-After": String(retryAfterSeconds),
-    },
-  });
+    return new Response(JSON.stringify({ error: "Terlalu banyak permintaan. Mohon tunggu sejenak." }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(retryAfterSeconds),
+      },
+    });
+  } catch (err) {
+    // Rate limiting is non-critical — fail open when Redis is unreachable.
+    console.error("[rate-limit] Redis unavailable, failing open:", err instanceof Error ? err.message : err);
+    return null;
+  }
 }

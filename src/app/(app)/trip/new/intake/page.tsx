@@ -45,6 +45,12 @@ export default async function TripIntakePage({
   const resolvedMode = mode === "surprise" ? "surprise" : "standard";
   const wantsSurprise = resolvedMode === "surprise";
 
+  if (!existingTripId) {
+    const { checkTripCreationAllowed } = await import("@/lib/entitlements");
+    const gate = await checkTripCreationAllowed(appUser.id);
+    if (!gate.ok) redirect("/plans?reason=trip-limit");
+  }
+
   const tripId = existingTripId ?? (await createDraftTrip(appUser.id, resolvedMode));
 
   if (tripId === null) {

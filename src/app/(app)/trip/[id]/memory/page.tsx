@@ -1,6 +1,7 @@
+import { MemoryScrapbook } from "@/components/memory/memory-scrapbook";
 import { MemoryWall } from "@/components/memory/memory-wall";
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
-import { getTripById, getTripPhotos } from "@/lib/data";
+import { getItineraryItems, getTripById, getTripPhotos } from "@/lib/data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 
@@ -34,18 +35,21 @@ export default async function TripMemoryPage({ params }: { params: Promise<{ id:
   }
 
   const resolvedTripId = trip.id;
-  const photos = await getTripPhotos(resolvedTripId);
+  const [photos, items] = await Promise.all([getTripPhotos(resolvedTripId), getItineraryItems(resolvedTripId)]);
 
   return (
-    <MemoryWall
-      tripId={resolvedTripId}
-      initialPhotos={photos
-        .filter((photo) => Boolean(photo.public_url))
-        .map((photo) => ({
-          id: photo.id,
-          url: photo.public_url as string,
-          caption: photo.caption ?? "",
-        }))}
-    />
+    <div className="space-y-4">
+      <MemoryScrapbook tripId={resolvedTripId} items={items} photos={photos} />
+      <MemoryWall
+        tripId={resolvedTripId}
+        initialPhotos={photos
+          .filter((photo) => Boolean(photo.public_url))
+          .map((photo) => ({
+            id: photo.id,
+            url: photo.public_url as string,
+            caption: photo.caption ?? "",
+          }))}
+      />
+    </div>
   );
 }

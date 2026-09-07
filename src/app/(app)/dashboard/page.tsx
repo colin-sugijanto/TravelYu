@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { PointsWidget } from "@/components/loyalty/points-widget";
 import { getCurrentAppUser } from "@/lib/auth";
+import { getCreditState } from "@/lib/credits";
 import { getProfile, getTrips } from "@/lib/data";
+import { getPlanConfig } from "@/lib/plans";
 import { ArrowRight, PlaneTakeoff, Gift, MapPin } from "lucide-react";
 import { formatTripName } from "@/lib/utils";
 
@@ -14,7 +16,12 @@ export default async function DashboardPage() {
     redirect("/login?next=%2Fdashboard");
   }
 
-  const [profile, trips] = await Promise.all([getProfile(appUser.id), getTrips()]);
+  const [profile, trips, creditState] = await Promise.all([
+    getProfile(appUser.id),
+    getTrips(),
+    getCreditState(appUser.id),
+  ]);
+  const planConfig = getPlanConfig(creditState.planTier);
 
   // Use the freshest name: prefer DB full_name if it's not a Clerk user_xxx ID, else fallback to Clerk name or 'Traveler'
   const isClerkId = (name: string | null) => !name || name.startsWith("user_") || name.length > 40;
@@ -52,7 +59,23 @@ export default async function DashboardPage() {
           </div>
         </Card>
 
-        <PointsWidget points={profile.points_balance} tier={profile.loyalty_tier} />
+        <div className="space-y-4">
+          <PointsWidget points={profile.points_balance} tier={profile.loyalty_tier} />
+          <Card className="p-5">
+            <p className="text-sm font-bold">
+              {planConfig.name} · ⚡ {creditState.balance}/{creditState.quota} kredit AI
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Intake 1 · Komparasi 6 · Generate 25 · Editor 2 · Regen 5 · Parser tiket 3
+            </p>
+            <Link
+              href="/plans"
+              className="mt-3 inline-flex rounded-full bg-zinc-900 px-4 py-2 text-xs font-bold text-white"
+            >
+              {creditState.planTier === "free" ? "Upgrade ke Member/Pro" : "Kelola Paket"}
+            </Link>
+          </Card>
+        </div>
       </section>
 
       <Card className="p-8 border-transparent shadow-sm bg-white">

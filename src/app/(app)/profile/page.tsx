@@ -1,6 +1,11 @@
+import Link from "next/link";
+
 import { Card, CardText, CardTitle } from "@/components/ui/card";
+import { PassportStats } from "@/components/profile/passport-stats";
 import { getCurrentAppUser } from "@/lib/auth";
+import { getCreditState } from "@/lib/credits";
 import { getProfile } from "@/lib/data";
+import { getPlanConfig } from "@/lib/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
@@ -43,12 +48,30 @@ export default async function ProfilePage() {
     redirect("/login?next=%2Fprofile");
   }
 
-  const profile = await getProfile(appUser.id);
+  const [profile, creditState] = await Promise.all([getProfile(appUser.id), getCreditState(appUser.id)]);
+  const planConfig = getPlanConfig(creditState.planTier);
   const initialVibe = Array.isArray(profile.travel_preferences?.vibe) ? profile.travel_preferences?.vibe.join(", ") : "";
   const initialBudgetTier = profile.travel_preferences?.budget_tier ?? "";
 
   return (
-    <Card className="max-w-3xl p-5">
+    <div className="mx-auto w-full max-w-3xl space-y-4">
+    <Card className="p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <CardTitle>Paket & Kredit AI</CardTitle>
+          <CardText className="mt-1">
+            {planConfig.name} · ⚡ {creditState.balance}/{creditState.quota} kredit (periode {creditState.period})
+          </CardText>
+        </div>
+        <Link href="/plans" className="rounded-full bg-zinc-900 px-4 py-2 text-xs font-bold text-white">
+          Kelola Paket
+        </Link>
+      </div>
+    </Card>
+
+    <PassportStats userId={appUser.id} />
+
+    <Card className="p-5">
       <CardTitle>Profil Saya</CardTitle>
       <CardText className="mt-1">Kelola data onboarding: nama, WA, dan preferensi perjalanan.</CardText>
 
@@ -74,5 +97,6 @@ export default async function ProfilePage() {
         </button>
       </form>
     </Card>
+    </div>
   );
 }

@@ -346,19 +346,46 @@ export async function getTripPhotos(tripId: string): Promise<TripPhoto[]> {
 
   if (!hasSupabaseEnv()) return [];
 
+  const toPublic = (rows: TripPhoto[]) =>
+    rows.map((row) => ({
+      ...row,
+      public_url: supabaseAdmin.storage.from("trip-photos").getPublicUrl(row.storage_path).data.publicUrl,
+    }));
+
   try {
-    const { data } = await supabaseAdmin
+    // New scrapbook columns (migration 014); fall back when not yet applied
+    const { data, error } = await supabaseAdmin
+      .from("trip_photos")
+      .select("id,trip_id,user_id,storage_path,caption,uploaded_at,itinerary_item_id,taken_at,day_number")
+      .eq("trip_id", tripId)
+      .order("uploaded_at", { ascending: false })
+      .limit(100);
+
+    if (!error && data) return toPublic(data as TripPhoto[]);
+
+    const retry = await supabaseAdmin
       .from("trip_photos")
       .select("id,trip_id,user_id,storage_path,caption,uploaded_at")
       .eq("trip_id", tripId)
       .order("uploaded_at", { ascending: false })
       .limit(20);
 
-    const rows = (data as TripPhoto[]) ?? [];
-    return rows.map((row) => ({
-      ...row,
-      public_url: supabaseAdmin.storage.from("trip-photos").getPublicUrl(row.storage_path).data.publicUrl,
-    }));
+    return toPublic((retry.data as TripPhoto[] | null) ?? []);
+  } catch {
+    return [];
+  }
+}
+
+export async function getTripBookings(tripId: string) {
+  if (!hasSupabaseEnv()) return [];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("trip_bookings")
+      .select("*")
+      .eq("trip_id", tripId)
+      .order("created_at", { ascending: true });
+    if (error) return [];
+    return (data ?? []) as import("@/types/domain").TripBooking[];
   } catch {
     return [];
   }

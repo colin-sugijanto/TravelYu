@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
+import { requireAiCredits } from "@/lib/credits";
 import { model, hasConfiguredOpenRouter } from "@/lib/ai/openrouter";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
@@ -212,6 +213,9 @@ export async function POST(request: Request) {
   if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const creditBlock = await requireAiCredits(appUser.id, "compare-options", { tripId: trip.id });
+  if (creditBlock) return creditBlock;
 
   await supabaseAdmin
     .from("trips")
