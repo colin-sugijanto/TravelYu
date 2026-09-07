@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Card, CardTitle } from "@/components/ui/card";
-import type { ItineraryItem, ParsedBooking, TripBooking } from "@/types/domain";
+import type { ItineraryItem, TripBooking } from "@/types/domain";
+import { ImportTicketCard } from "./import-ticket-card";
 
 interface BookingVaultProps {
   tripId: string;
@@ -21,14 +22,28 @@ const TYPE_LABEL: Record<string, string> = {
   other: "📄 Lainnya",
 };
 
+function formatWhen(b: TripBooking) {
+  const raw = b.depart_at ?? b.check_in ?? b.arrive_at ?? null;
+  if (!raw) return null;
+  try {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10);
+    return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", hour: b.depart_at ? "2-digit" : undefined, minute: b.depart_at ? "2-digit" : undefined }).format(d);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ticket Locker v2 — seamless vault:
+ * - input via ImportTicketCard (paste + PDF/image upload → Supabase Storage `trip-tickets`)
+ * - list with 🔒 anchor badge when linked to itinerary (AI plans around these)
+ * - file attachment opens the stored e-ticket, PNR 1-tap copy
+ * Responsive grid: 1 col mobile, 2 col desktop.
+ */
 export function BookingVault({ tripId, items, canEdit = true }: BookingVaultProps) {
   const [bookings, setBookings] = useState<TripBooking[]>([]);
-  const [rawText, setRawText] = useState("");
-  const [parsed, setParsed] = useState<ParsedBooking | null>(null);
-  const [parseSource, setParseSource] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"parse" | "save" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [linkedItemId, setLinkedItemId] = useState("");
 
   const load = async () => {
     try {
@@ -37,7 +52,7 @@ export function BookingVault({ tripId, items, canEdit = true }: BookingVaultProp
       const payload = (await res.json()) as { bookings?: TripBooking[] };
       setBookings(payload.bookings ?? []);
     } catch {
-      // ignore — vault stays empty until migration applied
+      // ignore
     }
   };
 
@@ -45,59 +60,6 @@ export function BookingVault({ tripId, items, canEdit = true }: BookingVaultProp
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId]);
-
-  const parse = async () => {
-    if (!rawText.trim() || busy) return;
-    setBusy("parse");
-    setMessage(null);
-    try {
-      const res = await fetch("/api/ai/parse-booking", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: rawText, tripId }),
-      });
-      const payload = (await res.json()) as {
-        parsed?: ParsedBooking;
-        source?: string;
-        error?: string;
-        message?: string;
-        code?: string;
-      };
-      if (!res.ok) {
-        setMessage(payload.message ?? payload.error ?? "Gagal parse booking.");
-        return;
-      }
-      setParsed(payload.parsed ?? null);
-      setParseSource(payload.source ?? "ai");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const save = async () => {
-    if (!parsed || busy) return;
-    setBusy("save");
-    setMessage(null);
-    try {
-      const res = await fetch(`/api/trip/${encodeURIComponent(tripId)}/bookings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...parsed, linked_item_id: linkedItemId || null }),
-      });
-      const payload = (await res.json()) as { ok?: boolean; booking?: TripBooking; error?: string };
-      if (!res.ok || !payload.ok) {
-        setMessage(payload.error ?? "Gagal menyimpan booking.");
-        return;
-      }
-      setParsed(null);
-      setRawText("");
-      setLinkedItemId("");
-      setMessage("Booking tersimpan di Ticket Locker ✓");
-      await load();
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const remove = async (bookingId: string) => {
     const res = await fetch(
@@ -117,116 +79,103 @@ export function BookingVault({ tripId, items, canEdit = true }: BookingVaultProp
     }
   };
 
+  const itemById = new Map(items.map((i) => [i.id, i]));
+  const anchored = bookings.filter((b) => b.linked_item_id).length;
+
   return (
-    <Card className="p-5">
-      <CardTitle>🎫 Ticket Locker</CardTitle>
-      <p className="mt-1 text-xs text-zinc-500">
-        Tempel teks tiket (Traveloka/Tiket.com/Garuda/Lion/KAI/Agoda) → AI ekstrak PNR, jam & hotel →
-        tersimpan di itinerary. Biaya 3 kredit AI per parse.
-      </p>
+    <div className="space-y-3">
+      {canEdit ? <ImportTicketCard tripId={tripId} /> : null}
 
-      {canEdit ? (
-        <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <textarea
-            value={rawText}
-            onChange={(e) => setRawText(e.target.value)}
-            rows={3}
-            placeholder="Contoh: GA-412 CGK → DPS 12 Nov 09:30 PNR ABC123 …"
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-amber-400"
-          />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={parse}
-              disabled={busy !== null || !rawText.trim()}
-              className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-            >
-              {busy === "parse" ? "Parsing…" : "✨ Parse dengan AI"}
-            </button>
-            {parsed ? (
-              <select
-                value={linkedItemId}
-                onChange={(e) => setLinkedItemId(e.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-2 py-1.5 text-xs"
-              >
-                <option value="">Tanpa link item</option>
-                {items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    Day {item.day_number} · {item.title.slice(0, 40)}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {parsed ? (
-              <button
-                type="button"
-                onClick={save}
-                disabled={busy !== null}
-                className="rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-              >
-                {busy === "save" ? "Menyimpan…" : "Simpan ke Locker"}
-              </button>
-            ) : null}
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle>🎫 Ticket Locker {bookings.length > 0 ? `· ${bookings.length}` : ""}</CardTitle>
+            <p className="mt-1 text-xs text-zinc-500">
+              {anchored > 0
+                ? `🔒 ${anchored} tiket jadi patokan AI — itinerary disusun di sekitar tiket ini, bukan sebaliknya.`
+                : "Tiket tersimpan jadi patokan AI saat generate / regen itinerary."}
+            </p>
           </div>
-
-          {parsed ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-              <p className="font-bold">
-                {TYPE_LABEL[parsed.booking_type] ?? parsed.booking_type} · {parsed.title}
-              </p>
-              <p className="mt-0.5">
-                {parsed.provider ?? "—"} · PNR: {parsed.booking_ref ?? "—"} ·{" "}
-                {parsed.origin ?? "?"} → {parsed.destination ?? "?"} ({parseSource})
-              </p>
-            </div>
-          ) : null}
         </div>
-      ) : null}
 
-      {message ? <p className="mt-2 text-xs text-zinc-600">{message}</p> : null}
+        {message ? <p className="mt-2 text-xs text-zinc-600">{message}</p> : null}
 
-      <div className="mt-3 space-y-2">
-        {bookings.length === 0 ? (
-          <p className="text-xs text-zinc-400">Belum ada tiket tersimpan untuk trip ini.</p>
-        ) : null}
-        {bookings.map((b) => (
-          <div key={b.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[13px] font-bold">
-                  {TYPE_LABEL[b.booking_type] ?? b.booking_type} · {b.title}
-                </p>
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  {b.provider ?? "—"}
-                  {b.booking_ref ? (
-                    <>
-                      {" · PNR "}
-                      <button
-                        type="button"
-                        onClick={() => copy(b.booking_ref)}
-                        className="font-mono font-bold text-zinc-800 underline decoration-dotted"
-                        title="Tap untuk salin PNR"
-                      >
-                        {b.booking_ref}
-                      </button>
-                    </>
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {bookings.length === 0 ? (
+            <p className="text-xs text-zinc-400 md:col-span-2">Belum ada tiket tersimpan untuk trip ini.</p>
+          ) : null}
+          {bookings.map((b) => {
+            const linked = b.linked_item_id ? itemById.get(b.linked_item_id) : null;
+            const when = formatWhen(b);
+            return (
+              <div key={b.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-1.5 text-[13px] font-bold">
+                      <span>{TYPE_LABEL[b.booking_type] ?? b.booking_type}</span>
+                      <span className="truncate">{b.title}</span>
+                      {linked ? (
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800">🔒 ANCHOR D{linked.day_number}</span>
+                      ) : null}
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {b.provider ?? "—"}
+                      {b.booking_ref ? (
+                        <>
+                          {" · "}
+                          <button
+                            type="button"
+                            onClick={() => copy(b.booking_ref)}
+                            className="font-mono font-bold text-zinc-800 underline decoration-dotted"
+                            title="Tap untuk salin PNR"
+                          >
+                            {b.booking_ref}
+                          </button>
+                        </>
+                      ) : null}
+                      {b.origin || b.destination ? ` · ${b.origin ?? "?"} → ${b.destination ?? "?"}` : ""}
+                      {when ? ` · ${when}` : ""}
+                    </p>
+                    {linked ? (
+                      <p className="mt-0.5 truncate text-[11px] text-amber-700">↳ {linked.title}</p>
+                    ) : null}
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {b.file_url ? (
+                        <a
+                          href={b.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          📎 Lihat e-ticket
+                        </a>
+                      ) : null}
+                      {b.booking_ref ? (
+                        <button
+                          type="button"
+                          onClick={() => copy(b.booking_ref)}
+                          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600"
+                        >
+                          Salin PNR
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => remove(b.id)}
+                      className="shrink-0 text-[11px] font-semibold text-red-500"
+                    >
+                      Hapus
+                    </button>
                   ) : null}
-                  {b.origin || b.destination ? ` · ${b.origin ?? "?"} → ${b.destination ?? "?"}` : ""}
-                </p>
+                </div>
               </div>
-              {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => remove(b.id)}
-                  className="shrink-0 text-[11px] font-semibold text-red-500"
-                >
-                  Hapus
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
   );
 }

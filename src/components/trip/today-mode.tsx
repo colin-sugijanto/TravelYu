@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { Card, CardTitle } from "@/components/ui/card";
-import { formatIdr } from "@/lib/utils";
+import { createGoogleMapsLink, formatIdr } from "@/lib/utils";
 import type { ItineraryItem, TripBooking } from "@/types/domain";
 
 interface TodayModeProps {
@@ -75,24 +75,44 @@ export function TodayMode({ tripId, items, bookings, tripStartDate }: TodayModeP
       </p>
 
       <div className="mt-3 space-y-2">
-        {todaysItems.map((item) => (
+        {todaysItems.map((item) => {
+          const mapsUrl = createGoogleMapsLink({
+            lat: item.location_lat,
+            lng: item.location_lng,
+            address: item.location_address,
+            title: item.title,
+          });
+          return (
           <div key={item.id} className="rounded-xl border border-teal-100 bg-white px-3 py-2">
             <p className="text-[13px] font-bold">{item.title}</p>
             <p className="text-[11px] text-zinc-500">
               {item.time_slot} · {item.activity_type} · {formatIdr(item.est_cost_idr)}
             </p>
-            {item.location_address ? (
-              <button
-                type="button"
-                onClick={() => copy(item.location_address ?? "")}
-                className="mt-1 text-left text-[11px] text-teal-700 underline decoration-dotted"
-                title="Salin alamat"
-              >
-                📍 {item.location_address}
-              </button>
-            ) : null}
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {item.location_address ? (
+                <button
+                  type="button"
+                  onClick={() => copy(item.location_address ?? "")}
+                  className="text-left text-[11px] text-teal-700 underline decoration-dotted"
+                  title="Salin alamat untuk Grab/Gojek"
+                >
+                  📍 {item.location_address}
+                </button>
+              ) : null}
+              {mapsUrl ? (
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full bg-teal-600 px-2 py-0.5 text-[10px] font-bold text-white"
+                >
+                  🗺 Navigasi
+                </a>
+              ) : null}
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {bookings.length > 0 ? (

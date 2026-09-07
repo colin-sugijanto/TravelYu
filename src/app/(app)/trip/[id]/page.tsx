@@ -13,7 +13,9 @@ import { TodayMode } from "@/components/trip/today-mode";
 import { TripActionBanner } from "@/components/trip/trip-action-banner";
 import { WrappedCard } from "@/components/trip/wrapped-card";
 import { GeneratingProgressClient } from "@/components/trip/generating-progress";
+import { ReminderButtons } from "@/components/trip/reminder-buttons";
 import { BookingVault } from "@/components/vault/booking-vault";
+import { ExpenseSplit } from "@/components/vault/expense-split";
 import { Card, CardTitle } from "@/components/ui/card";
 import { WeatherBanner } from "@/components/weather/weather-banner";
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
@@ -140,8 +142,9 @@ async function TimelineSection({
   tripId: string;
   canRegen?: boolean;
 }) {
-  const items = await getItineraryItems(tripId);
-  return <ItineraryTimeline items={items} tripId={tripId} canRegen={canRegen} />;
+  const [items, bookings] = await Promise.all([getItineraryItems(tripId), getTripBookings(tripId)]);
+  const anchorItemIds = bookings.map((b) => b.linked_item_id).filter((v): v is string => Boolean(v));
+  return <ItineraryTimeline items={items} tripId={tripId} canRegen={canRegen} anchorItemIds={anchorItemIds} />;
 }
 
 
@@ -158,10 +161,27 @@ async function BudgetSection({ tripId, totalBudget }: { tripId: string; totalBud
 async function VaultSection({ tripId, canEdit }: { tripId: string; canEdit?: boolean }) {
   const [items, bookings] = await Promise.all([getItineraryItems(tripId), getTripBookings(tripId)]);
   if (items.length === 0 && bookings.length === 0) return null;
+  let memberCount = 1;
+  try {
+    const { count } = await supabaseAdmin
+      .from("group_trip_members")
+      .select("trip_id", { count: "exact", head: true })
+      .eq("trip_id", tripId);
+    memberCount = 1 + (count ?? 0);
+  } catch {
+    memberCount = 1;
+  }
+  const anchored = bookings.filter((b) => b.linked_item_id).length;
   return (
     <div className="space-y-4">
+      {anchored > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+          🔒 <span className="font-bold">{anchored} tiket asli jadi patokan AI.</span> Regen / edit tidak akan menimpa jadwal tiketmu — AI menyusun di sekitarnya.
+        </div>
+      ) : null}
       <BookingVault tripId={tripId} items={items} canEdit={canEdit} />
       <ExpenseTracker tripId={tripId} items={items} canEdit={canEdit} />
+      <ExpenseSplit tripId={tripId} canEdit={canEdit} memberCount={memberCount} />
     </div>
   );
 }
@@ -386,6 +406,16 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
             />
           </div>
 
+          {(trip.status === "approved" || trip.status === "active") && isOwner ? (
+            <Card className="p-4">
+              <p className="text-xs font-bold text-teal-900">⏰ Pengingat otomatis (WA + email via n8n)</p>
+              <p className="mt-0.5 text-[11px] text-zinc-500">1 tap — tidak perlu ingat manual H-7 / H-1 / check-in.</p>
+              <div className="mt-2">
+                <ReminderButtons tripId={trip.id} />
+              </div>
+            </Card>
+          ) : null}
+
           <Card className="p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Link
@@ -398,7 +428,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
                 href={`/trip/${trip.id}/memory`}
                 className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
               >
-                Buka Memory Wall
+                Buka Storybook & Memory
               </Link>
               {trip.status === "completed" ? (
                 <Link

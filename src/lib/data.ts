@@ -391,6 +391,72 @@ export async function getTripBookings(tripId: string) {
   }
 }
 
+export async function getTripExpenses(tripId: string) {
+  if (!hasSupabaseEnv()) return [];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("trip_expenses")
+      .select("*")
+      .eq("trip_id", tripId)
+      .order("created_at", { ascending: true });
+    if (error) return [];
+    return (data ?? []) as import("@/types/domain").TripExpense[];
+  } catch {
+    return [];
+  }
+}
+
+export async function getTripsWithCovers(): Promise<import("@/types/domain").TripWithCover[]> {
+  const trips = await getTrips();
+  if (trips.length === 0 || !hasSupabaseEnv()) return trips;
+  try {
+    const ids = trips.map((t) => t.id);
+    const { data: photos } = await supabaseAdmin
+      .from("trip_photos")
+      .select("trip_id,storage_path,uploaded_at")
+      .in("trip_id", ids)
+      .order("uploaded_at", { ascending: false })
+      .limit(100);
+    const coverByTrip = new Map<string, { url: string; count: number }>();
+    const countByTrip = new Map<string, number>();
+    for (const p of (photos as Array<{ trip_id: string; storage_path: string }> | null) ?? []) {
+      countByTrip.set(p.trip_id, (countByTrip.get(p.trip_id) ?? 0) + 1);
+      if (!coverByTrip.has(p.trip_id)) {
+        const { data } = supabaseAdmin.storage.from("trip-photos").getPublicUrl(p.storage_path);
+        if (data?.publicUrl) coverByTrip.set(p.trip_id, { url: data.publicUrl, count: 1 });
+      }
+    }
+    return trips.map((t) => ({
+      ...t,
+      cover_url: coverByTrip.get(t.id)?.url ?? null,
+      photo_count: countByTrip.get(t.id) ?? 0,
+    }));
+  } catch {
+    return trips;
+  }
+}
+
+export async function getTripTodayNotes(tripId: string): Promise<import("@/types/domain").TodayNote[]> {
+  if (!hasSupabaseEnv()) return [];
+  try {
+    const { data } = await supabaseAdmin.from("trips").select("intake_data").eq("id", tripId).maybeSingle();
+    const intake = (data?.intake_data as Record<string, unknown> | null) ?? {};
+    const notes = Array.isArray(intake.todayNotes) ? (intake.todayNotes as Array<Record<string, unknown>>) : [];
+    return notes
+      .map((n) => ({
+        text: String(n.text ?? ""),
+        day: typeof n.day === "number" ? n.day : null,
+        itemId: typeof n.itemId === "string" ? n.itemId : null,
+        by: String(n.by ?? ""),
+        ts: String(n.ts ?? ""),
+      }))
+      .filter((n) => n.text.length > 0)
+      .slice(-50);
+  } catch {
+    return [];
+  }
+}
+
 export async function getUsers(limit = 100): Promise<UserProfile[]> {
   if (!hasSupabaseEnv()) return [mockProfile];
 

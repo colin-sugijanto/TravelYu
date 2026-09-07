@@ -211,6 +211,30 @@ export interface TripPhoto {
   day_number?: number | null;
 }
 
+export interface TripExpense {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  title: string;
+  amount_idr: number;
+  paid_by: string;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface TodayNote {
+  text: string;
+  day: number | null;
+  itemId: string | null;
+  by: string;
+  ts: string;
+}
+
+export interface TripWithCover extends Trip {
+  cover_url?: string | null;
+  photo_count?: number;
+}
+
 export interface FlaggedQueueItem {
   id: string;
   trip_id: string;

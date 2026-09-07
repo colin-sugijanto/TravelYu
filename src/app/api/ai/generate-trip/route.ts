@@ -1226,6 +1226,30 @@ async function persistGeneratedItinerary(input: z.infer<typeof itineraryPayloadS
       return { ok: false, error: insertError.message };
     }
 
+    // Auto-link unlinked bookings to the closest matching new item (anchor UX: 🔒 badge in timeline)
+    try {
+      const [{ data: freshItems }, { data: unlinked }] = await Promise.all([
+        supabaseAdmin.from("itinerary_items").select("id,day_number,activity_type,title").eq("trip_id", input.tripId),
+        supabaseAdmin.from("trip_bookings").select("id,booking_type").eq("trip_id", input.tripId).is("linked_item_id", null),
+      ]);
+      const items = (freshItems as Array<{ id: string; day_number: number; activity_type: string; title: string }> | null) ?? [];
+      const bookings = (unlinked as Array<{ id: string; booking_type: string }> | null) ?? [];
+      const pickFor = (bookingType: string) => {
+        const want = bookingType === "hotel" ? "accommodation" : bookingType === "flight" || bookingType === "train" || bookingType === "ferry" || bookingType === "bus" ? "transport" : null;
+        if (!want) return null;
+        const candidates = items.filter((i) => i.activity_type === want).sort((a, b) => a.day_number - b.day_number);
+        return candidates[0]?.id ?? null;
+      };
+      for (const b of bookings.slice(0, 10)) {
+        const targetId = pickFor(b.booking_type);
+        if (targetId) {
+          await supabaseAdmin.from("trip_bookings").update({ linked_item_id: targetId }).eq("id", b.id);
+        }
+      }
+    } catch {
+      // best-effort only
+    }
+
     const { data: tripRow } = await supabaseAdmin
       .from("trips")
       .select("intake_data")
@@ -1406,6 +1430,30 @@ export async function POST(request: Request) {
           .join("\n")
       : "No pre-seeded vendors found for this destination — generate realistic Indonesian venue names.";
 
+  // FIXED BOOKINGS (Ticket Locker anchors) — plan AROUND these, never duplicate them.
+  let bookingAnchorContext = "No fixed bookings — full creative planning allowed.";
+  try {
+    const { data: anchors } = await supabaseAdmin
+      .from("trip_bookings")
+      .select("booking_type,provider,booking_ref,title,origin,destination,depart_at,arrive_at,check_in,check_out")
+      .eq("trip_id", body.tripId)
+      .limit(20);
+    if (anchors && anchors.length > 0) {
+      bookingAnchorContext = anchors
+        .map((b, i) => {
+          const when =
+            (b as { depart_at?: string | null }).depart_at ??
+            (b as { check_in?: string | null }).check_in ??
+            (b as { arrive_at?: string | null }).arrive_at ??
+            "-";
+          return `${i + 1}. [${String((b as { booking_type?: string }).booking_type ?? "other").toUpperCase()}] ${String((b as { title?: string }).title ?? "Booking")} | ${(b as { provider?: string | null }).provider ?? "-"} | PNR ${(b as { booking_ref?: string | null }).booking_ref ?? "-"} | ${(b as { origin?: string | null }).origin ?? "?"} → ${(b as { destination?: string | null }).destination ?? "?"} | ${when}`;
+        })
+        .join("\n");
+    }
+  } catch {
+    // anchors optional — never block generation
+  }
+
   try {
     const timeoutMs = process.env.VERCEL ? VERCEL_TIMEOUT_MS : LOCAL_TIMEOUT_MS;
     const controller = new AbortController();
@@ -1474,6 +1522,15 @@ Target trip duration: ${targetDays} days
 
 VERIFIED VENDORS FOR THIS DESTINATION:
 ${vendorContext}
+
+FIXED BOOKINGS (user's real tickets — MUST respect, NEVER duplicate or contradict):
+${bookingAnchorContext}
+
+Anchor rules:
+- If a flight/train/ferry anchor exists, Day 1 morning = arrival transfer from that destination, NOT a new flight booking.
+- If a hotel anchor exists (check_in/check_out), use it as the accommodation item on matching days and do NOT invent another hotel for those nights.
+- Keep anchor times as ground truth; schedule other activities around them with realistic buffers.
+- Mention the anchor provider/PNR city in the matching item description (e.g. "Lanjutan dari penerbangan GA-412 CGK→DPS").
 
 Generate a complete itinerary following the comparison option details (destinations, vibe, budget).
 Use day numbers from 1 to ${targetDays}. Cover each day with balanced timeslots.

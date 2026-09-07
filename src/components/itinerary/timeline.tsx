@@ -16,6 +16,8 @@ interface TimelineProps {
   canRegen?: boolean;
   /** Show internal vendor detail modal */
   allowVendorDetails?: boolean;
+  /** Item IDs locked by real tickets (AI planned around them) */
+  anchorItemIds?: string[];
 }
 
 function ensureValidHttpUrl(value: string | null | undefined) {
@@ -147,6 +149,7 @@ export function ItineraryTimeline({
   tripId,
   canRegen = false,
   allowVendorDetails = true,
+  anchorItemIds = [],
 }: TimelineProps) {
   if (items.length === 0) {
     return (
@@ -192,7 +195,14 @@ export function ItineraryTimeline({
                     return (
                       <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">{item.title}</p>
+                    <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
+                      <span>{item.title}</span>
+                      {anchorItemIds.includes(item.id) ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800" title="Dikunci oleh tiket asli — AI menyusun di sekitar jadwal ini">
+                          🔒 Tiket asli
+                        </span>
+                      ) : null}
+                    </p>
                     <Badge tone={item.status === "booked_locked" ? "danger" : "brand"}>{item.status.replaceAll("_", " ")}</Badge>
                   </div>
                   <CardText className="mt-1">{item.description}</CardText>

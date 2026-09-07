@@ -20,9 +20,10 @@ type WrappedPayload = {
   branding: string;
 };
 
-/** "TravelYu Wrapped" — 9:16-ish viral card for completed trips. */
+/** "TravelYu Wrapped" — viral card + downloadable share image (SVG) + copy link. */
 export function WrappedCard({ tripId }: { tripId: string }) {
   const [data, setData] = useState<WrappedPayload | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +37,18 @@ export function WrappedCard({ tripId }: { tripId: string }) {
       cancelled = true;
     };
   }, [tripId]);
+
+  const copyLink = async () => {
+    if (!data) return;
+    const url = `${window.location.origin}${data.shareUrl}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // clipboard unavailable
+    }
+  };
 
   if (!data) return null;
 
@@ -59,21 +72,38 @@ export function WrappedCard({ tripId }: { tripId: string }) {
         <p className="mt-3 text-[13px]">
           Estimasi {formatIdr(data.estTotalIdr)}
           {data.actualTotalIdr !== null ? ` · Aktual ${formatIdr(data.actualTotalIdr)}` : ""}
+          {data.bookings > 0 ? ` · 🎫 ${data.bookings} tiket asli` : ""}
         </p>
         {data.savingsIdr !== null && data.savingsIdr >= 0 ? (
           <p className="mt-0.5 text-[13px] font-bold">Hemat {formatIdr(data.savingsIdr)} 🎉</p>
         ) : null}
         <p className="mt-2 text-[11px] opacity-80">{data.branding}</p>
       </div>
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-zinc-500">Bagikan ke IG Story / WhatsApp Status</p>
-        <Link
-          href={data.shareUrl}
-          target="_blank"
-          className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white"
-        >
-          Buka Link Share
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={`/api/trip/${encodeURIComponent(tripId)}/wrapped-image`}
+            download={`travelyu-wrapped-${tripId}.svg`}
+            className="rounded-full bg-gradient-to-r from-orange-500 to-rose-500 px-3 py-1.5 text-xs font-bold text-white"
+          >
+            ⬇ Download gambar
+          </a>
+          <button
+            type="button"
+            onClick={copyLink}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700"
+          >
+            {copied ? "✓ Link disalin" : "Salin link share"}
+          </button>
+          <Link
+            href={data.shareUrl}
+            target="_blank"
+            className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white"
+          >
+            Buka Link Share
+          </Link>
+        </div>
       </div>
     </Card>
   );

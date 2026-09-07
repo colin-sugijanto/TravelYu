@@ -8,6 +8,8 @@ type TravelYuEventType =
   | "itinerary_ready"
   | "cs_approved"
   | "trip_reminder_h1"
+  | "checkin_reminder_h24"
+  | "packing_reminder_h7"
   | "vendor_contact"
   | "trip_completed"
   | "post_trip_review"
