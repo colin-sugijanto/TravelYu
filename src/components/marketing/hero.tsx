@@ -25,7 +25,7 @@ export function Hero() {
 
           <div className="relative z-20 mt-8 w-full sm:w-auto lg:mt-10">
             <Link
-              href="/trip/new/intake"
+              href="/trip/new"
               className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[var(--brand)] px-8 text-base font-semibold text-white shadow-[0_14px_32px_-18px_rgba(249,115,22,0.7)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--brand-strong)] hover:shadow-[0_18px_36px_-16px_rgba(249,115,22,0.58)] sm:w-auto"
             >
               <Search className="w-5 h-5" />

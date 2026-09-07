@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { PackingList } from "@/components/packing/packing-list";
 import { getOrGeneratePackingList, getTripById } from "@/lib/data";
@@ -23,5 +24,12 @@ export default async function TripPackingPage({ params }: { params: Promise<{ id
   }
 
   const items = await getOrGeneratePackingList(trip.id);
-  return <PackingList initialItems={items} />;
+  return (
+    <div className="mx-auto w-full max-w-2xl space-y-3">
+      <Link href={`/trip/${trip.id}`} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800">
+        ← Kembali ke itinerary
+      </Link>
+      <PackingList initialItems={items} storageKey={`travelyu:packing:${trip.id}`} />
+    </div>
+  );
 }

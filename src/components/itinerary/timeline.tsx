@@ -66,6 +66,18 @@ function getActivityLinkLabel(item: ItineraryItem) {
   return "Buka Website Lokasi";
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  booked_locked: "Terkunci",
+  planned: "Terencana",
+  confirmed: "Dikonfirmasi",
+  completed: "Selesai",
+  cancelled: "Dibatalkan",
+};
+
+function formatItemStatus(status: string) {
+  return STATUS_LABELS[status] ?? status.replaceAll("_", " ");
+}
+
 function RegenDayButton({ tripId, dayNumber }: { tripId: string; dayNumber: number }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +99,10 @@ function RegenDayButton({ tripId, dayNumber }: { tripId: string; dayNumber: numb
 
   const handleRegen = () => {
     if (pending) return;
+    const confirmed = window.confirm(
+      `Regen ulang Day ${dayNumber}? Ini memakai ±5 kredit AI dan menyusun ulang aktivitas hari tersebut.`,
+    );
+    if (!confirmed) return;
     setError(null);
     setPending(true);
     void (async () => {
@@ -203,7 +219,7 @@ export function ItineraryTimeline({
                         </span>
                       ) : null}
                     </p>
-                    <Badge tone={item.status === "booked_locked" ? "danger" : "brand"}>{item.status.replaceAll("_", " ")}</Badge>
+                    <Badge tone={item.status === "booked_locked" ? "danger" : "brand"}>{formatItemStatus(item.status)}</Badge>
                   </div>
                   <CardText className="mt-1">{item.description}</CardText>
                   {(activityWebsiteUrl || mapsUrl) ? (

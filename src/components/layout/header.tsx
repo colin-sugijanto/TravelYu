@@ -40,7 +40,7 @@ export function AppHeader({ showAdminLink = false }: { showAdminLink?: boolean }
               </Link>
             ) : null}
             <Link
-              href="/trip/new/intake"
+              href="/trip/new"
               className="rounded-full px-4 py-2 text-sm font-semibold text-slate-800 transition-all hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]"
             >
               Rencanakan Perjalanan

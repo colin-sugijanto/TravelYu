@@ -218,6 +218,11 @@ const STATUS_INFO: Record<string, { label: string; desc: string; color: string }
     desc: "Kamu belum menyelesaikan percakapan intake dengan AI. Lanjutkan untuk mendapatkan opsi trip.",
     color: "bg-amber-50 border-amber-200 text-amber-800",
   },
+  compare: {
+    label: "Pilih Opsi Trip",
+    desc: "Intake selesai. Pilih salah satu dari 3 opsi AI untuk lanjut ke itinerary.",
+    color: "bg-amber-50 border-amber-200 text-amber-800",
+  },
   payment_pending: {
     label: "Menunggu Pembayaran",
     desc: "Trip ini menunggu konfirmasi pembayaran planning fee.",
@@ -230,12 +235,17 @@ const STATUS_INFO: Record<string, { label: string; desc: string; color: string }
   },
   draft: {
     label: "Draft — Menunggu Persetujuan",
-    desc: "Itinerary sudah dibuat. Menunggu review dari tim TravelYu sebelum bisa diakses.",
+    desc: "Itinerary sudah dibuat dan bisa kamu edit. Tim TravelYu akan mereview sebelum trip bisa diaktifkan.",
     color: "bg-purple-50 border-purple-200 text-purple-800",
   },
   approved: {
     label: "Disetujui ✓",
     desc: "Itinerary sudah disetujui! Kamu bisa langsung cek detail perjalananmu.",
+    color: "bg-green-50 border-green-200 text-green-800",
+  },
+  confirmed: {
+    label: "Dikonfirmasi ✓",
+    desc: "Trip sudah dikonfirmasi. Kamu bisa langsung cek detail perjalananmu.",
     color: "bg-green-50 border-green-200 text-green-800",
   },
   active: {
@@ -247,6 +257,11 @@ const STATUS_INFO: Record<string, { label: string; desc: string; color: string }
     label: "Selesai ✨",
     desc: "Trip selesai! Bagikan pengalamanmu dan dapatkan poin rewards.",
     color: "bg-zinc-50 border-zinc-200 text-zinc-700",
+  },
+  cancelled: {
+    label: "Dibatalkan",
+    desc: "Trip ini dibatalkan. Hubungi CS jika butuh bantuan reaktivasi.",
+    color: "bg-red-50 border-red-200 text-red-700",
   },
 };
 
@@ -279,14 +294,20 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
   }
 
   const tripName = formatTripName(trip);
-  const isWorkspaceReady = trip.status === "approved" || trip.status === "active" || trip.status === "completed";
+  const isWorkspaceReady = trip.status === "approved" || trip.status === "confirmed" || trip.status === "active" || trip.status === "completed";
+  const isDraftWorkspace = trip.status === "draft";
+  const showStatusGate = !isWorkspaceReady && !isDraftWorkspace;
   const statusInfo = STATUS_INFO[trip.status];
 
   const destinationCity = await getWeatherCity(trip.id, trip.intake_data?.where);
-  const totalBudget = trip.total_est_cost_idr ?? 15000000;
+  const hasSpecificCity = destinationCity !== "Indonesia";
+  const totalBudget = trip.total_est_cost_idr ?? 0;
 
   return (
     <div className="space-y-4">
+      <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800">
+        ← Semua trip
+      </Link>
       {/* Realtime status watcher — replaces the old GeneratingPoller */}
       {trip.status === "generating" && (
         <>
@@ -317,8 +338,8 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
         </div>
       </Card>
 
-      {/* Status gate — shown for non-workspace-ready trips */}
-      {!isWorkspaceReady && (
+      {/* Status gate — shown for pre-workspace trips (intake/compare/generating/etc) */}
+      {showStatusGate && (
         <Card className="p-8">
           <div className="max-w-lg mx-auto text-center space-y-5">
             <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mx-auto">
@@ -361,7 +382,15 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
                   Lanjutkan Perencanaan <ArrowRight className="w-4 h-4" />
                 </Link>
               )}
-              {(trip.status === "generating" || trip.status === "draft") && (
+              {trip.status === "compare" && (
+                <Link
+                  href={`/trip/new/compare?tripId=${trip.id}`}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-orange-500 text-white font-semibold text-sm hover:bg-orange-600 transition-colors"
+                >
+                  Pilih Opsi Trip <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
+              {trip.status === "generating" && (
                 <RefreshButton />
               )}
               <Link
@@ -375,12 +404,12 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
         </Card>
       )}
 
-      {/* Full workspace — only shown when itinerary is ready */}
+      {/* Full workspace — approved/confirmed/active/completed */}
       {isWorkspaceReady && (
         <>
           {/* Activate / Complete banners (owner only, when approved or active) */}
-          {isOwner && (trip.status === "approved" || trip.status === "active") && (
-            <TripActionBanner tripId={trip.id} tripStatus={trip.status} />
+          {isOwner && (trip.status === "approved" || trip.status === "confirmed" || trip.status === "active") && (
+            <TripActionBanner tripId={trip.id} tripStatus={trip.status === "active" ? "active" : "approved"} />
           )}
 
           {/* Completed trip — show review link */}
@@ -400,15 +429,25 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
           )}
 
           <div className="mt-1">
-            <WeatherBanner
-              city={destinationCity}
-              fallbackAdvice="Ada potensi perubahan cuaca. Prioritaskan aktivitas outdoor di pagi hari jika memungkinkan."
-            />
+            {hasSpecificCity ? (
+              <WeatherBanner
+                city={destinationCity}
+                fallbackAdvice="Ada potensi perubahan cuaca. Prioritaskan aktivitas outdoor di pagi hari jika memungkinkan."
+              />
+            ) : (
+              <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <span aria-hidden="true">🌤️</span>
+                <div>
+                  <p className="text-sm font-semibold">Tips cuaca</p>
+                  <p className="text-sm text-[var(--text-soft)]">Ada potensi perubahan cuaca. Prioritaskan aktivitas outdoor di pagi hari jika memungkinkan.</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {(trip.status === "approved" || trip.status === "active") && isOwner ? (
+          {(trip.status === "approved" || trip.status === "confirmed" || trip.status === "active") && isOwner ? (
             <Card className="p-4">
-              <p className="text-xs font-bold text-teal-900">⏰ Pengingat otomatis (WA + email via n8n)</p>
+              <p className="text-xs font-bold text-teal-900">⏰ Pengingat otomatis (WA + email)</p>
               <p className="mt-0.5 text-[11px] text-zinc-500">1 tap — tidak perlu ingat manual H-7 / H-1 / check-in.</p>
               <div className="mt-2">
                 <ReminderButtons tripId={trip.id} />
@@ -417,32 +456,35 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
           ) : null}
 
           <Card className="p-4">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Aksi trip</p>
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 href={`/trip/${trip.id}/packing`}
                 className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
               >
-                Buka Packing List
+                🎒 Packing List
               </Link>
               <Link
                 href={`/trip/${trip.id}/memory`}
                 className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
               >
-                Buka Storybook & Memory
+                📖 Storybook & Memory
               </Link>
               {trip.status === "completed" ? (
                 <Link
                   href={`/trip/${trip.id}/review`}
                   className="inline-flex rounded-full border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-100"
                 >
-                  Tulis Review Vendor
+                  ⭐ Tulis Review (+50 poin)
                 </Link>
               ) : null}
               <a
                 href={`/api/trip/${trip.id}/export-pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex rounded-full border border-[var(--brand)]/35 bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-strong)] transition hover:opacity-85"
               >
-                Download PDF Itinerary
+                ⬇ PDF Itinerary
               </a>
               <a
                 href={`/trip/s/${trip.public_id}`}
@@ -450,7 +492,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
                 rel="noopener noreferrer"
                 className="inline-flex rounded-full border border-[var(--brand-blue)]/35 bg-[var(--brand-blue-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-blue)] transition hover:opacity-85"
               >
-                Lihat Halaman Share
+                🔗 Halaman Share
               </a>
             </div>
           </Card>
@@ -468,7 +510,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
               <Suspense fallback={<TimelineSkeleton />}>
                 <TimelineSection
                   tripId={trip.id}
-                  canRegen={isOwner && (trip.status === "approved" || trip.status === "active")}
+                  canRegen={isOwner && (trip.status === "approved" || trip.status === "confirmed" || trip.status === "active")}
                 />
               </Suspense>
 
@@ -494,24 +536,30 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
         </>
       )}
 
-       {/* Draft state — allow AI editor after generation */}
-       {trip.status === "draft" && (
-         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-           <div className="space-y-4">
-             <Suspense fallback={<TimelineSkeleton />}>
-               <TimelineSection tripId={trip.id} />
-             </Suspense>
-             <Suspense fallback={<PanelSkeleton />}>
-               <MapSection tripId={trip.id} />
-             </Suspense>
-           </div>
-           <div className="space-y-4">
-             <EditorChat tripId={trip.id} />
-             <Suspense fallback={<PanelSkeleton />}>
-               <BudgetSection tripId={trip.id} totalBudget={totalBudget} />
-             </Suspense>
-           </div>
-         </div>
+       {/* Draft state — single workspace with approval notice (no duplicate gate) */}
+       {isDraftWorkspace && (
+        <>
+          <div className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-3">
+            <p className="text-sm font-bold text-purple-800">Draft — menunggu persetujuan tim TravelYu</p>
+            <p className="mt-0.5 text-xs text-purple-700">Kamu tetap bisa preview & edit via AI di bawah. Setelah disetujui, tombol “Mulai Trip” akan muncul.</p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-4">
+              <Suspense fallback={<TimelineSkeleton />}>
+                <TimelineSection tripId={trip.id} />
+              </Suspense>
+              <Suspense fallback={<PanelSkeleton />}>
+                <MapSection tripId={trip.id} />
+              </Suspense>
+            </div>
+            <div className="space-y-4">
+              <EditorChat tripId={trip.id} />
+              <Suspense fallback={<PanelSkeleton />}>
+                <BudgetSection tripId={trip.id} totalBudget={totalBudget} />
+              </Suspense>
+            </div>
+          </div>
+        </>
        )}
     </div>
   );

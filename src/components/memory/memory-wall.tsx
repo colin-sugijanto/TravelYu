@@ -23,52 +23,65 @@ export function MemoryWall({ tripId, initialPhotos = [], readOnly = false }: Mem
   const [photos, setPhotos] = useState<MemoryPhoto[]>(initialPhotos);
   const [caption, setCaption] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const onUpload = async (file: File) => {
-    if (isUploading || readOnly) return;
+  const refreshList = async () => {
+    const list = await fetch(`/api/trip/${encodeURIComponent(tripId)}/photos`);
+    const listPayload = await list.json();
+    if (list.ok) {
+      setPhotos(
+        (listPayload.photos ?? [])
+          .filter((photo: { publicUrl?: string }) => Boolean(photo.publicUrl))
+          .map((photo: { id: string; publicUrl: string; caption: string | null }) => ({
+            id: photo.id,
+            url: photo.publicUrl,
+            caption: photo.caption ?? "",
+          })),
+      );
+    }
+  };
+
+  const onUploadFiles = async (files: FileList | File[]) => {    if (isUploading || readOnly) return;
+    const queue = Array.from(files).slice(0, 5);
+    if (queue.length === 0) return;
 
     setIsUploading(true);
     setErrorMessage(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("caption", caption);
+      for (let i = 0; i < queue.length; i += 1) {
+        const file = queue[i];
+        setUploadProgress(`Mengunggah ${i + 1}/${queue.length}…`);
+        const formData = new FormData();
+        formData.append("file", file);
+        // Caption only applies to single uploads; batch uploads keep filenames.
+        formData.append("caption", queue.length === 1 ? caption : "");
 
-      const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/photos`, {
-        method: "POST",
-        body: formData,
-      });
+        const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/photos`, {
+          method: "POST",
+          body: formData,
+        });
 
-      const payload = await response.json();
-      if (!response.ok) {
-        setErrorMessage(payload.error ?? "Gagal upload foto");
-        return;
+        const payload = await response.json();
+        if (!response.ok) {
+          setErrorMessage(payload.error ?? `Gagal upload foto ${i + 1}`);
+          break;
+        }
       }
 
-      const list = await fetch(`/api/trip/${encodeURIComponent(tripId)}/photos`);
-      const listPayload = await list.json();
-      if (list.ok) {
-        setPhotos(
-          (listPayload.photos ?? [])
-            .filter((photo: { publicUrl?: string }) => Boolean(photo.publicUrl))
-            .map((photo: { id: string; publicUrl: string; caption: string | null }) => ({
-              id: photo.id,
-              url: photo.publicUrl,
-              caption: photo.caption ?? "",
-            })),
-        );
-      }
-
+      await refreshList();
       setCaption("");
       router.refresh();
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
   const removePhoto = async (photoId: string) => {
     if (readOnly) return;
+    const confirmed = window.confirm("Hapus foto ini dari memory wall?");
+    if (!confirmed) return;
 
     const response = await fetch(`/api/trip/${encodeURIComponent(tripId)}/photos?photoId=${encodeURIComponent(photoId)}`, {
       method: "DELETE",
@@ -81,8 +94,13 @@ export function MemoryWall({ tripId, initialPhotos = [], readOnly = false }: Mem
 
   return (
     <Card className="p-5">
-      <CardTitle>Memory Wall</CardTitle>
-      <p className="mt-1 text-sm text-[var(--text-soft)]">Upload max 20 photos per trip (Supabase Storage bucket: trip-photos)</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <CardTitle>📷 Memory Wall</CardTitle>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+          {photos.length}/20 foto
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-[var(--text-soft)]">Upload hingga 5 foto sekaligus. +10 poin per foto (maks 20 foto/trip).</p>
 
       {!readOnly ? (
         <div className="mt-4 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-alt)] p-3">
@@ -90,22 +108,26 @@ export function MemoryWall({ tripId, initialPhotos = [], readOnly = false }: Mem
             type="text"
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
-            placeholder="Caption foto (opsional)"
+            placeholder="Caption foto (khusus upload 1 foto)"
+            aria-label="Caption foto"
             className="h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm outline-none focus:border-[var(--brand)]"
           />
           <input
             type="file"
             accept="image/*"
+            multiple
             disabled={isUploading}
             onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void onUpload(file);
+              const files = event.target.files;
+              if (files && files.length > 0) {
+                void onUploadFiles(files);
               }
               event.currentTarget.value = "";
             }}
             className="block w-full text-sm"
+            aria-label="Pilih foto untuk diunggah"
           />
+          {uploadProgress ? <p className="text-xs font-semibold text-blue-700">{uploadProgress}</p> : null}
           {errorMessage ? <p className="text-xs text-[var(--danger)]">{errorMessage}</p> : null}
         </div>
       ) : null}

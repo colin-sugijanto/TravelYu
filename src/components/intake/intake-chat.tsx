@@ -233,6 +233,19 @@ const REQUIRED_FIELDS_BY_MODE: Record<
   surprise: ["who", "when", "budget", "pacing", "specialNeeds"],
 };
 
+const QUICK_REPLIES: Record<string, string[]> = {
+  standard: [
+    "Berdua dengan pasangan, 3 hari 2 malam",
+    "Bali, awal bulan depan, budget 10 juta",
+    "Santai, kuliner + budaya",
+  ],
+  surprise: [
+    "Berdua, awal Juli, budget 12 juta",
+    "Keluarga 4 orang, libur sekolah",
+    "Solo trip santai, healing",
+  ],
+};
+
 export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   const router = useRouter();
   const requiredFields = REQUIRED_FIELDS_BY_MODE[mode];
@@ -546,6 +559,21 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
   }
 
   return (
+    <div className="mx-auto w-full max-w-6xl space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/trip/new" className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800">
+          ← Pilih mode lain
+        </Link>
+        <ol className="flex items-center gap-1.5 text-[11px] font-bold" aria-label="Langkah pembuatan trip">
+          <li className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">1 · Mode</li>
+          <li className="text-zinc-300">→</li>
+          <li className="rounded-full bg-zinc-900 px-2.5 py-1 text-white">2 · Intake</li>
+          <li className="text-zinc-300">→</li>
+          <li className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">3 · Opsi</li>
+          <li className="text-zinc-300">→</li>
+          <li className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">4 · Itinerary</li>
+        </ol>
+      </div>
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
         <CardTitle>AI Intake Agent</CardTitle>
@@ -553,14 +581,21 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
           Mode:{" "}
           {mode === "surprise"
             ? "Surprise Me (AI pilih destinasi)"
-            : "Standard (destinasi dari kamu)"}
+            : "Standard (destinasi dari kamu)"}{" "}
+          · {completed}/{requiredFields.length} terkumpul · 1 kredit/pesan
         </p>
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <Link
             href={modeToggleHref}
             className="inline-flex items-center rounded-full border border-(--border) bg-white px-3 py-1 text-xs font-semibold text-(--text-soft) transition hover:bg-(--bg-alt)"
           >
             {modeToggleLabel}
+          </Link>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-slate-400 hover:text-slate-600"
+          >
+            Simpan & keluar
           </Link>
         </div>
 
@@ -603,7 +638,9 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
           }}
           className="mt-3 flex gap-2"
         >
+          <label htmlFor="intake-input" className="sr-only">Tulis jawaban kamu</label>
           <input
+            id="intake-input"
             className="h-11 flex-1 rounded-full border border-(--border) bg-white px-4 text-sm outline-none transition-all focus:border-(--brand) focus:ring-2 focus:ring-[rgba(249,115,22,0.2)]"
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -612,15 +649,34 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
                 ? "Contoh: berdua, awal Juli, budget 12 juta"
                 : "Tulis jawaban kamu..."
             }
+            autoComplete="off"
           />
           <button
             type="submit"
-            className="h-11 rounded-full bg-(--brand) px-4 text-sm font-semibold text-white shadow-[0_14px_24px_-16px_rgba(249,115,22,0.7)] transition hover:bg-(--brand-strong)"
-            disabled={isLoading}
+            className="h-11 rounded-full bg-(--brand) px-4 text-sm font-semibold text-white shadow-[0_14px_24px_-16px_rgba(249,115,22,0.7)] transition hover:bg-(--brand-strong) disabled:opacity-60"
+            disabled={isLoading || !input.trim()}
           >
             {isLoading ? "..." : "Kirim"}
           </button>
         </form>
+
+        {messages.length <= 1 ? (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {QUICK_REPLIES[mode].map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                disabled={isLoading}
+                onClick={() => {
+                  setInput(chip);
+                }}
+                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 disabled:opacity-50"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <p className="mt-2 text-xs text-(--text-soft)">
           {isIntakeCompleted
@@ -657,26 +713,38 @@ export function IntakeChat({ tripId, mode }: IntakeChatProps) {
               const done =
                 isFieldCompleted(field, userOnlyConversationText) ||
                 isFieldCompletedByPayload(field, intakeProgressPayload);
+              const value = intakeProgressPayload[field as keyof IntakeProgressPayload];
             return (
               <div
                 key={field}
-                className="flex items-center justify-between rounded-lg border border-slate-200/70 bg-(--bg-alt) px-3 py-2"
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/70 bg-(--bg-alt) px-3 py-2"
               >
-                <span className="capitalize">
-                  {FIELD_LABELS[field] ?? field}
+                <span className="min-w-0">
+                  <span className="block capitalize font-medium">
+                    {FIELD_LABELS[field] ?? field}
+                  </span>
+                  {done && typeof value === "string" && value.trim() ? (
+                    <span className="block truncate text-xs text-slate-500" title={value}>
+                      {value.slice(0, 60)}
+                    </span>
+                  ) : null}
                 </span>
                 <span
-                  className={
-                    done ? "text-(--brand-strong)" : "text-(--text-soft)"
-                  }
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
+                    done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-(--text-soft)"
+                  }`}
                 >
-                  {done ? "Selesai" : "Menunggu"}
+                  {done ? "✓ Selesai" : "Menunggu"}
                 </span>
               </div>
             );
           })}
         </div>
+        <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-[11px] leading-relaxed text-blue-700">
+          💡 Tips: jawab santai dalam 1 kalimat (contoh: “berdua, Bali 3 hari, budget 8 juta, santai”). Progress tersimpan otomatis — aman keluar kapan saja.
+        </p>
       </Card>
+    </div>
     </div>
   );
 }

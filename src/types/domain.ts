@@ -1,12 +1,18 @@
 export type UserRole = "user" | "admin" | "super_admin";
 
+// Note: DB enum `trip_status` (20260324_001) only has
+// intake/payment_pending/paid/generating/draft/approved/active/completed/cancelled.
+// "compare" and "confirmed" are UI-only legacy labels (read-path only) — never WRITE
+// them to `trips.status` or the DB enum will reject the update.
 export type TripStatus =
   | "intake"
+  | "compare"
   | "payment_pending"
   | "paid"
   | "generating"
   | "draft"
   | "approved"
+  | "confirmed"
   | "active"
   | "completed"
   | "cancelled";

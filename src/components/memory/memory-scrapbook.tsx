@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Card, CardTitle } from "@/components/ui/card";
 import type { ItineraryItem, TripPhoto } from "@/types/domain";
@@ -18,6 +19,7 @@ interface MemoryScrapbookProps {
  * Photos without linkage fall back to day_number, then "Unsorted".
  */
 export function MemoryScrapbook({ tripId, items, photos, canEdit = true }: MemoryScrapbookProps) {
+  const router = useRouter();
   const [linking, setLinking] = useState<string | null>(null);
   const [filterDay, setFilterDay] = useState<number | "all">("all");
 
@@ -37,12 +39,13 @@ export function MemoryScrapbook({ tripId, items, photos, canEdit = true }: Memor
   const linkPhoto = async (photoId: string, itemId: string, day: number | null) => {
     setLinking(photoId);
     try {
-      await fetch(`/api/trip/${encodeURIComponent(tripId)}/photos/${encodeURIComponent(photoId)}`, {
+      const res = await fetch(`/api/trip/${encodeURIComponent(tripId)}/photos/${encodeURIComponent(photoId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itinerary_item_id: itemId || null, day_number: day }),
       });
-      window.location.reload();
+      if (!res.ok) return;
+      router.refresh();
     } finally {
       setLinking(null);
     }

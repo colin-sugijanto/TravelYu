@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { Compass, Sparkles, Ticket } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Compass, Sparkles, Ticket } from "lucide-react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { ImportTicketCard } from "@/components/vault/import-ticket-card";
@@ -52,7 +53,27 @@ async function startTrip(mode: "standard" | "surprise") {
 
 export default function NewTripPage() {
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-4xl space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800">
+          <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke Dashboard
+        </Link>
+        <ol className="flex items-center gap-1.5 text-[11px] font-bold" aria-label="Langkah pembuatan trip">
+          <li className="rounded-full bg-zinc-900 px-2.5 py-1 text-white">1 · Pilih Mode</li>
+          <li className="text-zinc-300">→</li>
+          <li className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">2 · Intake</li>
+          <li className="text-zinc-300">→</li>
+          <li className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">3 · Opsi</li>
+          <li className="text-zinc-300">→</li>
+          <li className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">4 · Itinerary</li>
+        </ol>
+      </div>
+
+      <div>
+        <h1 className="text-xl font-extrabold tracking-tight">Mulai trip baru — pilih cara favoritmu</h1>
+        <p className="mt-1 text-sm text-[var(--text-soft)]">Biaya AI transparan: intake 1/pesan · komparasi 6 · generate itinerary 25. Tidak ada trip duplikat sampai kamu lanjut intake.</p>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="p-5 shadow-[0_20px_38px_-30px_rgba(15,23,42,0.35)]">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -64,9 +85,9 @@ export default function NewTripPage() {
           <form action={startTrip.bind(null, "standard")} className="mt-4">
             <button
               type="submit"
-              className="inline-flex rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_24px_-16px_rgba(249,115,22,0.65)] transition hover:bg-[var(--brand-strong)]"
+              className="inline-flex w-full items-center justify-center rounded-full bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_12px_24px_-16px_rgba(249,115,22,0.65)] transition hover:bg-[var(--brand-strong)]"
             >
-              Start Standard
+              Mulai Standard →
             </button>
           </form>
         </Card>
@@ -83,9 +104,9 @@ export default function NewTripPage() {
           <form action={startTrip.bind(null, "surprise")} className="mt-4">
             <button
               type="submit"
-              className="inline-flex w-full items-center justify-center rounded-full border border-[var(--brand-strong)] bg-[var(--brand-strong)] px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_28px_-18px_rgba(249,115,22,0.8)] transition hover:translate-y-[-1px] hover:bg-[#c2470f]"
+              className="inline-flex w-full items-center justify-center rounded-full border border-[var(--brand-strong)] bg-[var(--brand-strong)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_16px_28px_-18px_rgba(249,115,22,0.8)] transition hover:translate-y-[-1px] hover:bg-[#c2470f]"
             >
-              Surprise Me Sekarang
+              Coba Surprise Me →
             </button>
           </form>
         </Card>

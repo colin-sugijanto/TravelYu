@@ -302,8 +302,14 @@ export function EditorChat({ tripId }: { tripId: string }) {
   }
 
   return (
-    <Card className="flex h-135 flex-col p-4">
-      <CardTitle>AI Editor</CardTitle>
+    <Card className="flex h-135 flex-col border-orange-200 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <CardTitle>🤖 AI Editor</CardTitle>
+        <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-700">
+          2 kredit/pesan
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-[var(--text-soft)]">Ubah itinerary: tukar, tambah, hapus, atau cari alternatif.</p>
       <div className="mt-3 flex-1 space-y-3 overflow-y-auto rounded-xl bg-(--bg-alt) p-3">
         {messages.length === 0 ? (
           <p className="text-sm text-(--text-soft)">
@@ -333,16 +339,16 @@ export function EditorChat({ tripId }: { tripId: string }) {
                   key={message.id}
                   className={
                     message.role === "user"
-                      ? "rounded-xl bg-blue-100 text-blue-900 p-2.5"
+                      ? "rounded-xl bg-orange-100 text-orange-950 p-2.5"
                       : "rounded-xl bg-white p-2.5 shadow-sm"
                   }
                 >
                   {message.role === "user" ? (
-                    <p className="text-sm">
-                      {String(
-                        (message.parts?.[0] as MessagePart | undefined)?.text ??
-                          "",
-                      )}
+                    <p className="whitespace-pre-line text-sm">
+                      {((message.parts ?? []) as MessagePart[])
+                        .filter((p) => p.type === "text" && p.text?.trim())
+                        .map((p) => p.text as string)
+                        .join("\n") || "…"}
                     </p>
                   ) : (
                     <div className="space-y-1">{rendered}</div>
@@ -363,14 +369,15 @@ export function EditorChat({ tripId }: { tripId: string }) {
           className="h-10 flex-1 rounded-full border border-(--border) bg-white px-4 text-sm outline-none focus:border-(--brand)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Edit itinerary..."
+          placeholder="cth: tukar resto hari 2 ke yang vegetarian…"
+          aria-label="Pesan untuk AI editor"
         />
         <button
           type="submit"
           className="rounded-full bg-(--brand) px-4 text-sm font-semibold text-white transition hover:bg-(--brand-strong) disabled:opacity-60"
-          disabled={isLoading}
+          disabled={isLoading || !input.trim()}
         >
-          {isLoading ? "…" : "Send"}
+          {isLoading ? "…" : "Kirim"}
         </button>
       </form>
     </Card>

@@ -99,6 +99,7 @@ export function WrappedCard({ tripId }: { tripId: string }) {
           <Link
             href={data.shareUrl}
             target="_blank"
+            rel="noopener noreferrer"
             className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white"
           >
             Buka Link Share

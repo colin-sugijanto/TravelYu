@@ -1,5 +1,9 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
+if (typeof window !== "undefined") {
+  throw new Error("supabaseAdmin (service_role) must only be imported in server code.");
+}
+
 let cachedClient: SupabaseClient | null = null;
 
 function createMissingEnvClient() {

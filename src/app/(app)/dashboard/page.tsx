@@ -23,7 +23,14 @@ const STATUS_LABELS: Record<string, string> = {
   active: "Aktif",
   completed: "Selesai",
   cancelled: "Dibatalkan",
+  payment_pending: "Menunggu Pembayaran",
 };
+
+function formatTripMeta(trip: TripWithCover) {
+  const intake = (trip.intake_data ?? {}) as { where?: string; when?: string };
+  const parts = [intake.where, intake.when].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 function TripCard({ trip }: { trip: TripWithCover }) {
   return (
@@ -61,7 +68,14 @@ function TripCard({ trip }: { trip: TripWithCover }) {
             <p className="truncate text-sm font-bold text-[var(--text)] group-hover:text-[var(--brand-blue)]">
               {formatTripName(trip)}
             </p>
-            <p className="mt-0.5 font-mono text-[11px] text-zinc-400">{trip.public_id}</p>
+            {(() => {
+              const meta = formatTripMeta(trip);
+              return meta ? (
+                <p className="truncate text-xs text-zinc-500">{meta}</p>
+              ) : (
+                <p className="mt-0.5 font-mono text-[11px] text-zinc-400">{trip.public_id}</p>
+              );
+            })()}
           </div>
         </div>
         <ArrowRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-[var(--brand-blue)]" />
@@ -99,7 +113,7 @@ export default async function DashboardPage() {
           <CardTitle className="text-xl font-bold tracking-tight md:text-2xl">Halo, {displayName} 👋</CardTitle>
           <CardText className="mt-2 text-sm md:text-base">Satu rumah untuk semua trip — yang direncanakan AI maupun tiket aslimu.</CardText>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <Link href="/trip/new/intake" className="group flex items-center justify-between rounded-xl bg-gradient-to-r from-[var(--brand)] to-[var(--brand-strong)] px-5 py-4 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+            <Link href="/trip/new" className="group flex items-center justify-between rounded-xl bg-gradient-to-r from-[var(--brand)] to-[var(--brand-strong)] px-5 py-4 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
               <span className="flex items-center gap-2"><PlaneTakeoff className="h-5 w-5" /> Mulai Trip Baru</span>
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Link>
@@ -108,7 +122,8 @@ export default async function DashboardPage() {
               <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1" />
             </Link>
           </div>
-          <Link href="/referral" className="mt-3 hidden items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-700 sm:inline-flex">
+          <p className="mt-2 text-[11px] text-zinc-400">Pilih Standard, Surprise Me, atau import tiket — tanpa trip duplikat.</p>
+          <Link href="/referral" className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-700">
             <Gift className="h-3.5 w-3.5" /> Punya kode referral? Klaim hadiah →
           </Link>
         </Card>

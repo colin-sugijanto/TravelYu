@@ -55,6 +55,9 @@ export default async function ProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4">
+      <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800">
+        ← Kembali ke dashboard
+      </Link>
     <Card className="p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -76,17 +79,31 @@ export default async function ProfilePage() {
       <CardText className="mt-1">Kelola data onboarding: nama, WA, dan preferensi perjalanan.</CardText>
 
       <form action={updateProfile} className="mt-4 space-y-3">
-        <label className="block text-sm font-medium">Nama Lengkap</label>
-        <input name="fullName" defaultValue={profile.full_name ?? ""} className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
+        <div>
+          <label htmlFor="profile-name" className="block text-sm font-medium">Nama Lengkap</label>
+          <input id="profile-name" name="fullName" defaultValue={profile.full_name ?? ""} autoComplete="name" className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm outline-none focus:border-orange-400" />
+        </div>
 
-        <label className="block text-sm font-medium">Nomor WhatsApp</label>
-        <input name="whatsappNumber" defaultValue={profile.whatsapp_number ?? ""} className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
+        <div>
+          <label htmlFor="profile-wa" className="block text-sm font-medium">Nomor WhatsApp</label>
+          <input id="profile-wa" name="whatsappNumber" defaultValue={profile.whatsapp_number ?? ""} inputMode="tel" autoComplete="tel" placeholder="08xxxxxxxxxx" pattern="(\+?62|0)8[0-9\s-]{7,14}" title="Contoh: 081234567890" className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm outline-none focus:border-orange-400" />
+          <p className="mt-1 text-[11px] text-zinc-400">Dipakai untuk notifikasi itinerary via WhatsApp.</p>
+        </div>
 
-        <label className="block text-sm font-medium">Preferensi Vibe (pisahkan dengan koma)</label>
-        <input name="vibe" defaultValue={initialVibe} placeholder="budaya, petualangan, kuliner" className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
+        <div>
+          <label htmlFor="profile-vibe" className="block text-sm font-medium">Preferensi Vibe (pisahkan dengan koma)</label>
+          <input id="profile-vibe" name="vibe" defaultValue={initialVibe} placeholder="budaya, petualangan, kuliner" className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm outline-none focus:border-orange-400" />
+        </div>
 
-        <label className="block text-sm font-medium">Tingkat Anggaran</label>
-        <input name="budgetTier" defaultValue={initialBudgetTier} placeholder="hemat / menengah / premium" className="h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm" />
+        <div>
+          <label htmlFor="profile-budget" className="block text-sm font-medium">Tingkat Anggaran</label>
+          <input id="profile-budget" name="budgetTier" defaultValue={initialBudgetTier} placeholder="hemat / menengah / premium" list="budget-tiers" className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] px-4 text-sm outline-none focus:border-orange-400" />
+          <datalist id="budget-tiers">
+            <option value="hemat" />
+            <option value="menengah" />
+            <option value="premium" />
+          </datalist>
+        </div>
 
         <div className="rounded-lg bg-[var(--bg-alt)] px-3 py-2 text-sm">
           Peran: <span className="font-semibold">{profile.role}</span> · Poin: <span className="font-semibold">{profile.points_balance}</span>

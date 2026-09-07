@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { BudgetTracker } from "@/components/itinerary/budget-tracker";
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { getItineraryItems, getTripById } from "@/lib/data";
@@ -26,5 +27,12 @@ export default async function TripBudgetPage({ params }: { params: Promise<{ id:
   }
 
   const items = await getItineraryItems(trip.id);
-  return <BudgetTracker totalBudgetIdr={trip.total_est_cost_idr ?? 15000000} items={items} />;
+  return (
+    <div className="mx-auto w-full max-w-2xl space-y-3">
+      <Link href={`/trip/${trip.id}`} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800">
+        ← Kembali ke itinerary
+      </Link>
+      <BudgetTracker totalBudgetIdr={trip.total_est_cost_idr ?? 0} items={items} />
+    </div>
+  );
 }

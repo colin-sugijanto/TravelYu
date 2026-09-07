@@ -62,14 +62,14 @@ export function Plan() {
 
         <div className="mt-16 flex flex-col items-center justify-center gap-4 text-center sm:flex-row">
           <Link
-            href="/trip/new/intake"
+            href="/trip/new"
             className="inline-flex h-14 w-full items-center justify-center rounded-full bg-zinc-900 px-8 font-semibold text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.65)] transition-all hover:-translate-y-0.5 hover:bg-zinc-800 sm:w-auto"
           >
             Mulai Rencanakan dengan AI
           </Link>
 
           <Link
-            href="/trip/new/intake?mode=surprise"
+            href="/trip/new"
             className="inline-flex h-14 w-full items-center justify-center rounded-full border border-[var(--brand)] bg-[var(--brand-soft)] px-8 font-semibold text-[var(--brand-strong)] transition-all hover:-translate-y-0.5 hover:bg-white sm:w-auto"
           >
             Kejutkan Saya

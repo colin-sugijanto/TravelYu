@@ -119,7 +119,7 @@ export function VendorModal({
                       {data.whatsapp_number && (
                         <div className="flex items-center gap-2.5">
                           <Phone className="w-4 h-4 text-zinc-400 shrink-0" />
-                          <a href={`https://wa.me/${data.whatsapp_number.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="text-[var(--brand)] hover:underline">
+                          <a href={`https://wa.me/${data.whatsapp_number.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">
                             {data.whatsapp_number}
                           </a>
                         </div>
@@ -127,7 +127,7 @@ export function VendorModal({
                       {data.ig_handle && (
                         <div className="flex items-center gap-2.5">
                           <LinkIcon className="w-4 h-4 text-zinc-400 shrink-0" />
-                          <a href={`https://instagram.com/${data.ig_handle.replace("@", "")}`} target="_blank" rel="noreferrer" className="text-[var(--brand)] hover:underline">
+                          <a href={`https://instagram.com/${data.ig_handle.replace("@", "")}`} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">
                             {data.ig_handle.startsWith("@") ? data.ig_handle : `@${data.ig_handle}`}
                           </a>
                         </div>

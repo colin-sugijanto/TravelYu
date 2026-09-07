@@ -569,5 +569,49 @@ Positions TravelYu as the permanent home for past/present/future trips, not just
 
 ---
 
-*TravelYu PRD v1.3 - Internal Product and Engineering Document*  
-*Aligned with repository state as of September 2026 (vault + subscriptions delivered; DOKU pending)*
+## 15. UI/UX Polish Pass (September 2026) — End-to-End Flow Audit
+
+Visual + code audit of the full user journey (landing → login → dashboard →
+`/trip/new` → intake → compare → `/trip/[id]` workspace → vault/packing/memory/review
+→ profile/plans, plus admin console and public share links). Fixes shipped without
+schema changes:
+
+- **Global/nav**: all "plan" CTAs route to `/trip/new` (no more orphan draft trips from
+  header/hero/dashboard clicks); mobile menu carries full nav + auth/credit state;
+  `lang="id"`, mobile zoom re-enabled; footer links resolve to real routes; newsletter
+  uses inline success instead of `alert()`; hidden-gems images swapped to stable
+  `images.unsplash.com` IDs.
+- **Creation funnel**: `/trip/new` gains a 4-step stepper, back link, ID copy, equal CTA
+  weight, and upfront AI-credit costs. Intake adds stepper, quick-reply chips, visible
+  extracted values per parameter, autosave note, and labeled input. Compare fixes the
+  save-spinner (`pendingOption`), removes dev-mode jargon, adds stepper/back links,
+  empty-state recovery, and "select first" guard on generate.
+- **Workspace** (`/trip/[id]`): draft no longer renders gate + workspace twice (single
+  approval banner + workspace); `STATUS_INFO` covers `compare`/`confirmed`/`cancelled`/
+  `payment_pending`; `confirmed` treated as workspace-ready; weather only renders for a
+  resolved city (neutral tips card otherwise); budget uses `?? 0` with "Total Estimasi"
+  mode instead of a fake Rp15jt; map shows Indonesia overview instead of fake Bali
+  bounds; AI Editor (orange, credit badge) visually distinct from human CS chat (blue,
+  auto-scroll); regen requires confirm with ±5-credit notice; item statuses humanized;
+  quick actions grouped with icons; PDF/share open in new tabs with `rel`.
+- **Vault & post-trip**: packing checks persist to `localStorage` with progress +
+  categories; memory wall supports up-to-5 batch upload with progress, `x/20` counter,
+  delete confirm; scrapbook uses `router.refresh()` (no full reload); review gains star
+  UI, `x/y` progress, back link, and +50-point copy.
+- **Account**: profile adds back link, labeled inputs, WA pattern validation, budget
+  datalist; plans use one global Bulanan/Tahunan toggle; onboarding is skippable
+  ("Isi nanti") with WA format validation.
+- **Admin**: nav extracted to `src/components/admin/admin-nav.tsx` client component
+  using `usePathname()` for reliable active-tab highlight (no `x-pathname` header
+  dependency); auth guard stays server-side in the layout.
+- **Coherency notes**: `TripStatus` TS type is a superset of the DB `trip_status` enum —
+  `compare`/`confirmed` are read-path UI-only labels, never written (DB enum would
+  reject them). `supabaseAdmin` now throws on client import. All `target="_blank"`
+  links carry `rel="noopener noreferrer"`.
+
+Verified: `npm run typecheck` clean, `npm run lint` clean, `npm run build` succeeds.
+
+---
+
+*TravelYu PRD v1.4 - Internal Product and Engineering Document*  
+*Aligned with repository state as of September 2026 (vault + subscriptions delivered; DOKU pending; UI/UX polish pass shipped)*

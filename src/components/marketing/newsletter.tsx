@@ -1,8 +1,11 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Send } from "lucide-react";
 
 export function Newsletter() {
+  const [email, setEmail] = useState("");
+  const [subscribed, setSubscribed] = useState(false);
   return (
     <section className="section-divider py-24">
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
@@ -19,10 +22,19 @@ export function Newsletter() {
               Bergabunglah dengan ribuan wisatawan. Dapatkan tips mingguan, penawaran eksklusif, dan rencana perjalanan dari ahli kami.
             </p>
 
-            <form className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto" onSubmit={(e) => { e.preventDefault(); alert("Terima kasih telah berlangganan!"); }}>
+            {subscribed ? (
+              <div className="mx-auto flex max-w-lg items-center justify-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-6 py-4 text-sm font-semibold text-emerald-700">
+                <CheckCircle2 className="h-5 w-5" />
+                Terima kasih! Cek email {email || "kamu"} untuk inspirasi trip pertama ✈️
+              </div>
+            ) : (
+            <form className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto" onSubmit={(e) => { e.preventDefault(); setSubscribed(true); }}>
               <input
                 type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="Masukkan alamat email Anda"
+                aria-label="Alamat email"
                 className="h-14 flex-1 rounded-full border border-zinc-200 bg-white px-6 text-zinc-900 placeholder:text-zinc-400 shadow-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-500"
                 required
               />
@@ -35,6 +47,7 @@ export function Newsletter() {
                 <Send className="w-4 h-4" />
               </button>
             </form>
+            )}
 
             <p className="mt-4 text-xs text-zinc-500">
               Dengan berlangganan, Anda menyetujui Syarat & Ketentuan serta Kebijakan Privasi kami.

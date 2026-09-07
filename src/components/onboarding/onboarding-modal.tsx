@@ -21,6 +21,7 @@ const BUDGET_TIER_OPTIONS = [
 export function OnboardingModal() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
+  const [dismissed, setDismissed] = useState(false);
   const [fullName, setFullName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [vibes, setVibes] = useState<string[]>([]);
@@ -38,8 +39,13 @@ export function OnboardingModal() {
     e.preventDefault();
     if (loading) return;
 
-    if (!whatsapp.trim()) {
+    const wa = whatsapp.trim().replace(/[\s-]/g, "");
+    if (!wa) {
       setError("Nomor WhatsApp wajib diisi supaya kami bisa mengirim notifikasi tripmu.");
+      return;
+    }
+    if (!/^(\+?62|0)8\d{7,12}$/.test(wa)) {
+      setError("Format nomor kurang tepat. Contoh valid: 081234567890 atau +6281234567890.");
       return;
     }
 
@@ -75,6 +81,8 @@ export function OnboardingModal() {
     }
   };
 
+  if (dismissed) return null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
@@ -83,6 +91,14 @@ export function OnboardingModal() {
       aria-labelledby="onboarding-title"
     >
       <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          aria-label="Isi nanti"
+          className="absolute right-3 top-3 z-10 rounded-full bg-black/20 px-3 py-1 text-xs font-semibold text-white hover:bg-black/35"
+        >
+          Isi nanti ✕
+        </button>
         {/* Header gradient */}
         <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-6 pt-8 pb-6 text-white">
           <div className="text-3xl mb-2">🌴</div>
@@ -154,7 +170,7 @@ export function OnboardingModal() {
                 type="button"
                 onClick={() => {
                   if (!whatsapp.trim()) {
-                    setError("Nomor WhatsApp wajib diisi.");
+                    setError("Nomor WhatsApp wajib diisi — atau tap “Isi nanti” di kanan atas.");
                     return;
                   }
                   setError(null);

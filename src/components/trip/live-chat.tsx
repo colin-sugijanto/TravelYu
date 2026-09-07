@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Card, CardText, CardTitle } from "@/components/ui/card";
 import { subscribeToCsChat } from "@/lib/realtime";
@@ -22,6 +22,7 @@ export function TripLiveChat({ tripId }: TripLiveChatProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -66,6 +67,12 @@ export function TripLiveChat({ tripId }: TripLiveChatProps) {
     if (!session || !Array.isArray(session.messages)) return [];
     return session.messages;
   }, [session]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages.length]);
 
   const sendMessage = async () => {
     const content = input.trim();
@@ -114,11 +121,16 @@ export function TripLiveChat({ tripId }: TripLiveChatProps) {
   };
 
   return (
-    <Card className="flex h-[440px] flex-col p-4">
-      <CardTitle>Live Chat ke CS</CardTitle>
-      <CardText className="mt-1">Chat tersimpan dan akan muncul kembali saat halaman di-refresh.</CardText>
+    <Card className="flex h-[440px] flex-col border-blue-200 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <CardTitle>💬 Live Chat ke CS (Manusia)</CardTitle>
+        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+          Manusia
+        </span>
+      </div>
+      <CardText className="mt-1">Butuh bantuan manusia? Chat tersimpan dan muncul kembali saat refresh.</CardText>
 
-      <div className="mt-3 flex-1 space-y-2 overflow-y-auto rounded-xl bg-[var(--bg-alt)] p-3">
+      <div ref={listRef} className="mt-3 flex-1 space-y-2 overflow-y-auto rounded-xl bg-[var(--bg-alt)] p-3">
         {messages.length === 0 ? (
           <p className="text-sm text-[var(--text-soft)]">Belum ada chat. Kirim pesan untuk menghubungi CS.</p>
         ) : (
@@ -146,16 +158,17 @@ export function TripLiveChat({ tripId }: TripLiveChatProps) {
         }}
       >
         <input
-          className="h-10 flex-1 rounded-full border border-[var(--border)] bg-white px-4 text-sm outline-none focus:border-[var(--brand)]"
+          className="h-10 flex-1 rounded-full border border-(--border) bg-white px-4 text-sm outline-none focus:border-[var(--brand-blue)]"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Tulis pesan untuk CS..."
+          placeholder="Tulis pesan untuk CS manusia…"
+          aria-label="Pesan untuk CS"
           disabled={loading}
         />
         <button
           type="submit"
-          disabled={loading}
-          className="rounded-full bg-[var(--brand)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--brand-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={loading || !input.trim()}
+          className="rounded-full bg-[var(--brand-blue)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--brand-blue-strong)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "..." : "Kirim"}
         </button>

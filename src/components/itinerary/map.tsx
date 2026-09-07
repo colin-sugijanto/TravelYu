@@ -304,17 +304,12 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
   const mapBounds =
     pointsWithCoordinates.length > 0
       ? toBoundingBox(pointsWithCoordinates)
-      : {
-          south: -8.52,
-          west: 114.92,
-          north: -8.02,
-          east: 115.42,
-          centerLat: -8.27,
-          centerLng: 115.17,
-        };
+      : null;
 
-  const mapZoom = inferZoomFromBounds(mapBounds);
-  const openStreetMapFallbackLink = `https://www.openstreetmap.org/?mlat=${mapBounds.centerLat}&mlon=${mapBounds.centerLng}#map=${mapZoom}/${mapBounds.centerLat}/${mapBounds.centerLng}`;
+  const mapZoom = mapBounds ? inferZoomFromBounds(mapBounds) : 5;
+  const openStreetMapFallbackLink = mapBounds
+    ? `https://www.openstreetmap.org/?mlat=${mapBounds.centerLat}&mlon=${mapBounds.centerLng}#map=${mapZoom}/${mapBounds.centerLat}/${mapBounds.centerLng}`
+    : "https://www.openstreetmap.org/#map=5/-2.5/118";
 
   useEffect(() => {
     if (!mapContainerRef.current || points.length < 1) return;
@@ -348,7 +343,8 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       const latLngs = pointsWithCoordinates.map((item) => L.latLng(item.location_lat as number, item.location_lng as number));
 
       if (latLngs.length === 0) {
-        map.setView([mapBounds.centerLat, mapBounds.centerLng], mapZoom);
+        // No coordinates yet — show Indonesia overview instead of a fake city.
+        map.setView([-2.5, 118], 5);
       } else if (latLngs.length === 1) {
         map.setView(latLngs[0], 13);
       } else {
@@ -388,7 +384,9 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
       }
       markerRefs.current = {};
     };
-  }, [mapBounds.centerLat, mapBounds.centerLng, mapZoom, points.length, pointsKey, pointsWithCoordinates]);
+  // pointsKey is the stable serialization of pointsWithCoordinates — intentional dep.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points.length, pointsKey]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -410,26 +408,32 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
 
   return (
     <Card className="p-4">
-      <CardTitle>Map Overview</CardTitle>
+      <div className="flex items-center justify-between gap-2">
+        <CardTitle>🗺️ Map Overview</CardTitle>
+        {pointsWithCoordinates.length > 0 ? (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+            {pointsWithCoordinates.length} pin
+          </span>
+        ) : null}
+      </div>
       <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-alt)] p-3">
         {points.length > 0 ? (
           <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white">
             <div className="space-y-2 p-2">
-              <div ref={mapContainerRef} className="h-72 w-full rounded-lg" aria-label="Interactive itinerary map" />
+              <div ref={mapContainerRef} className="h-72 w-full rounded-lg" aria-label="Peta interaktif itinerary" />
               <a
                 href={openStreetMapFallbackLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex text-xs font-semibold text-[var(--brand-blue-strong)] underline-offset-2 hover:underline"
               >
-                Buka peta penuh di OpenStreetMap (zoom {mapZoom})
+                Buka peta penuh di OpenStreetMap
               </a>
               {pointsWithCoordinates.length > 0 ? (
                 <p className="text-[11px] text-[var(--text-soft)]">Klik pin di peta untuk menyorot lokasi pada daftar di bawah.</p>
               ) : (
                 <>
-                  <p className="text-[11px] font-semibold text-[var(--text)]">Koordinat belum tersedia, peta tetap ditampilkan dengan estimasi area tujuan.</p>
-                  <p className="text-[11px] text-[var(--text-soft)]">Gunakan link lokasi di bawah untuk membuka navigasi Google Maps per aktivitas.</p>
+                  <p className="text-[11px] font-semibold text-[var(--text)]">Koordinat presisi belum tersedia — peta menampilkan Indonesia. Link navigasi per aktivitas tetap akurat di bawah.</p>
                   {firstAvailableMapLink ? (
                     <a
                       href={firstAvailableMapLink}
@@ -445,7 +449,7 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
             </div>
           </div>
         ) : (
-          <CardText>No location pins available yet.</CardText>
+          <CardText>Belum ada pin lokasi. Pin akan muncul setelah itinerary memiliki alamat atau koordinat.</CardText>
         )}
 
         <div className="mt-3 grid gap-2">
@@ -461,10 +465,12 @@ export function ItineraryMap({ items }: { items: ItineraryItem[] }) {
                 }
               }}
             >
-              <MapPin className="mt-0.5 h-4 w-4 text-[var(--brand)]" />
-              <div>
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand)]" />
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold">{item.title}</p>
-                <p className="text-xs text-[var(--text-soft)]">{item.location_address ?? "Unknown"}</p>
+                {item.location_address ? (
+                  <p className="text-xs text-[var(--text-soft)]">{item.location_address}</p>
+                ) : null}
                 <div className="mt-1 flex flex-wrap gap-3">
                   {(() => {
                     const activityLink = getActivityLink(item);

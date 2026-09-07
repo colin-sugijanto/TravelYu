@@ -11,14 +11,15 @@ function PlanCard({
   plan,
   current,
   pending,
+  cycle,
   onSelect,
 }: {
   plan: PlanConfig;
   current: boolean;
   pending: string | null;
+  cycle: "monthly" | "yearly";
   onSelect: (tier: PlanTier, cycle: "monthly" | "yearly") => void;
 }) {
-  const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
   const price = cycle === "yearly" ? plan.priceYearlyIdr : plan.priceMonthlyIdr;
   const perMonth =
     cycle === "yearly" && plan.priceYearlyIdr > 0 ? Math.round(plan.priceYearlyIdr / 12) : price;
@@ -36,20 +37,6 @@ function PlanCard({
       <p className="text-xs text-zinc-500">{plan.tagline}</p>
 
       <div className="mt-3">
-        {plan.tier !== "free" ? (
-          <div className="flex gap-1 rounded-full bg-slate-100 p-1 text-xs font-semibold">
-            {(["monthly", "yearly"] as const).map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCycle(c)}
-                className={`flex-1 rounded-full px-2 py-1 ${cycle === c ? "bg-white shadow" : "text-zinc-500"}`}
-              >
-                {c === "monthly" ? "Bulanan" : "Tahunan"}
-              </button>
-            ))}
-          </div>
-        ) : null}
         <p className="mt-2 text-2xl font-extrabold">
           {formatPlanPrice(price)}
           {plan.tier !== "free" ? (
@@ -104,6 +91,7 @@ export function PlansClient({
   quota: number;
 }) {
   const router = useRouter();
+  const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -140,9 +128,22 @@ export function PlansClient({
         Paket saat ini: <span className="font-bold uppercase">{PLAN_CONFIGS[currentTier].name}</span> · ⚡{" "}
         {balance}/{quota} kredit tersisa
       </p>
+      <div className="mx-auto flex w-fit gap-1 rounded-full bg-slate-100 p-1 text-xs font-bold">
+        {(["monthly", "yearly"] as const).map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setCycle(c)}
+            aria-pressed={cycle === c}
+            className={`rounded-full px-4 py-1.5 ${cycle === c ? "bg-white shadow" : "text-zinc-500"}`}
+          >
+            {c === "monthly" ? "Bulanan" : "Tahunan · hemat ~33%"}
+          </button>
+        ))}
+      </div>
       <div className="grid gap-4 md:grid-cols-3">
         {PLAN_ORDER.map((tier) => (
-          <PlanCard key={tier} plan={PLAN_CONFIGS[tier]} current={tier === currentTier} pending={pending} onSelect={select} />
+          <PlanCard key={tier} plan={PLAN_CONFIGS[tier]} current={tier === currentTier} pending={pending} cycle={cycle} onSelect={select} />
         ))}
       </div>
       {message ? (

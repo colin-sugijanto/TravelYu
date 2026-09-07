@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 
 // Simple SVG icons to replace lucide ones to avoid version issues
 const FacebookIcon = ({ className }: { className?: string }) => (
@@ -78,30 +79,30 @@ export function Footer() {
           <div className="lg:col-span-2 lg:col-start-6">
             <h4 className="text-white font-semibold mb-6">Perusahaan</h4>
             <ul className="space-y-4">
-              <li><span className="text-zinc-400">Tentang Kami</span></li>
-              <li><span className="text-zinc-400">Karir</span></li>
-              <li><span className="text-zinc-400">Blog Perjalanan</span></li>
-              <li><span className="text-zinc-400">Pers</span></li>
+              <li><Link href="/dashboard" className="text-zinc-400 transition-colors hover:text-white">Mulai Merencanakan</Link></li>
+              <li><Link href="/plans" className="text-zinc-400 transition-colors hover:text-white">Paket & Harga</Link></li>
+              <li><Link href="/activities" className="text-zinc-400 transition-colors hover:text-white">Aktivitas</Link></li>
+              <li><Link href="/destinations" className="text-zinc-400 transition-colors hover:text-white">Destinasi</Link></li>
             </ul>
           </div>
 
           <div className="lg:col-span-2">
             <h4 className="text-white font-semibold mb-6">Destinasi</h4>
             <ul className="space-y-4">
-              <li><span className="text-zinc-400">Bali</span></li>
-              <li><span className="text-zinc-400">Lombok</span></li>
-              <li><span className="text-zinc-400">Jawa</span></li>
-              <li><span className="text-zinc-400">Komodo</span></li>
+              <li><Link href="/destinations" className="text-zinc-400 transition-colors hover:text-white">Bali</Link></li>
+              <li><Link href="/destinations" className="text-zinc-400 transition-colors hover:text-white">Lombok</Link></li>
+              <li><Link href="/destinations" className="text-zinc-400 transition-colors hover:text-white">Yogyakarta</Link></li>
+              <li><Link href="/destinations" className="text-zinc-400 transition-colors hover:text-white">Raja Ampat</Link></li>
             </ul>
           </div>
 
           <div className="lg:col-span-3 lg:col-start-10">
             <h4 className="text-white font-semibold mb-6">Dukungan</h4>
             <ul className="space-y-4">
-              <li><span className="text-zinc-400">Pusat Bantuan</span></li>
-              <li><span className="text-zinc-400">Hubungi Kami</span></li>
-              <li><span className="text-zinc-400">Kebijakan Privasi</span></li>
-              <li><span className="text-zinc-400">Syarat Ketentuan</span></li>
+              <li><Link href="/dashboard" className="text-zinc-400 transition-colors hover:text-white">Dashboard Saya</Link></li>
+              <li><Link href="/profile" className="text-zinc-400 transition-colors hover:text-white">Profil & Bantuan CS</Link></li>
+              <li><Link href="/referral" className="text-zinc-400 transition-colors hover:text-white">Referral & Poin</Link></li>
+              <li><Link href="/plans" className="text-zinc-400 transition-colors hover:text-white">Kelola Paket</Link></li>
             </ul>
           </div>
         </div>

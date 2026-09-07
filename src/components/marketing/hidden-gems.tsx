@@ -5,7 +5,7 @@ export function HiddenGems() {
     {
       title: "Pink Beach",
       location: "Komodo National Park",
-      image: "https://images.unsplash.com/photo-1700591698351-f8131b0f5d3c?q=80&w=436&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+      image: "https://images.unsplash.com/photo-1559827260-dc66d52bef19?q=80&w=800&auto=format&fit=crop"
     },
     {
       title: "Mount Bromo",
@@ -15,11 +15,11 @@ export function HiddenGems() {
     {
       title: "Tiu Kelep Waterfall",
       location: "Lombok",
-      image: "https://plus.unsplash.com/premium_photo-1674014497100-a2751be936aa?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+      image: "https://images.unsplash.com/photo-1433086966358-54859d0ed716?q=80&w=800&auto=format&fit=crop"
     },
     {
       title: "Banda Islands",
-      location: "West Papua",
+      location: "Maluku",
       image: "https://images.unsplash.com/photo-1516690553959-71a414d6b9b6?q=80&w=800&auto=format&fit=crop"
     }
   ];

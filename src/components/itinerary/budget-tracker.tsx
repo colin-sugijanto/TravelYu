@@ -30,9 +30,11 @@ export function BudgetTracker({ totalBudgetIdr, items }: BudgetTrackerProps) {
   }
 
   const spent = items.reduce((sum, item) => sum + item.est_cost_idr, 0);
-  const left = Math.max(0, totalBudgetIdr - spent);
-  const usedPercent = totalBudgetIdr
-    ? Math.round((spent / totalBudgetIdr) * 100)
+  const hasBudget = totalBudgetIdr > 0;
+  const effectiveBudget = hasBudget ? totalBudgetIdr : spent;
+  const left = Math.max(0, effectiveBudget - spent);
+  const usedPercent = effectiveBudget
+    ? Math.min(100, Math.round((spent / effectiveBudget) * 100))
     : 0;
 
   const byCategory = items.reduce<Record<string, number>>((acc, item) => {
@@ -43,11 +45,16 @@ export function BudgetTracker({ totalBudgetIdr, items }: BudgetTrackerProps) {
 
   return (
     <Card className="p-5">
-      <CardTitle>Budget Tracker</CardTitle>
+      <CardTitle>💰 Budget Tracker</CardTitle>
+      {!hasBudget ? (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          Total budget belum diatur AI — angka di bawah adalah total estimasi dari itinerary.
+        </p>
+      ) : null}
       <div className="mt-3 rounded-xl bg-(--bg-alt) p-3">
         <div className="flex items-center justify-between text-sm">
-          <span>Total Budget</span>
-          <span className="font-semibold">{formatIdr(totalBudgetIdr)}</span>
+          <span>{hasBudget ? "Total Budget" : "Total Estimasi"}</span>
+          <span className="font-semibold">{formatIdr(effectiveBudget)}</span>
         </div>
         <div className="mt-1 flex items-center justify-between text-sm">
           <span>Remaining</span>
