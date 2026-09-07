@@ -4,6 +4,18 @@ import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { getItineraryItems, getTripById } from "@/lib/data";
 import { isTripMember } from "@/lib/trip-access";
 
+function sanitizeForPdf(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .normalize("NFKD")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .replace(/[^\x20-\x7E\r\n\t]/g, "")
+    .trim();
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const appUser = await getCurrentAppUser();
@@ -58,7 +70,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   cursorY -= 20;
 
-  page.drawText(`Trip Code: ${trip?.public_id ?? id}`, {
+  page.drawText(`Trip Code: ${sanitizeForPdf(trip?.public_id ?? id)}`, {
     x: 40,
     y: cursorY,
     size: 12,
@@ -88,7 +100,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       cursorY -= 20;
     }
 
-    page.drawText(`${item.time_slot.toUpperCase()} · ${item.title}`, {
+    const titleText = sanitizeForPdf(`${item.time_slot.toUpperCase()} - ${item.title}`);
+    page.drawText(titleText, {
       x: 40,
       y: cursorY,
       size: 11,
@@ -97,7 +110,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     });
 
     cursorY -= 15;
-    page.drawText(item.description, {
+    const descText = sanitizeForPdf(item.description);
+    page.drawText(descText, {
       x: 40,
       y: cursorY,
       size: 10,
@@ -107,7 +121,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     });
 
     // Approximate height for description
-    const lines = Math.ceil(item.description.length / 90);
+    const lines = Math.max(1, Math.ceil(descText.length / 90));
     cursorY -= (15 * lines) + 15;
   }
 

@@ -1,4 +1,4 @@
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { scheduleAwardPoints } from "@/lib/points";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -178,7 +178,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return Response.json({ error: "Photo not found" }, { status: 404 });
   }
 
-  if (photo.user_id !== appUser.id && trip.user_id !== appUser.id) {
+  if (photo.user_id !== appUser.id && trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 

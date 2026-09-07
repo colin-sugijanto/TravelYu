@@ -44,7 +44,7 @@ function isSameTripScope(context: ItineraryToolContext, tripId: string) {
 export function createItineraryTools(context: ItineraryToolContext) {
   return {
     update_itinerary_item: {
-    description: "Update minor editable fields for draft/booked_flexible itinerary item by itemId or by day/title match",
+    description: "Update fields for draft/booked_flexible itinerary item by itemId or by day/title match",
     inputSchema: z.object({
       itemId: z.string().optional().refine((val) => !val || (val !== "undefined" && val !== "null" && val.trim().length > 0), {
         message: "itemId must be a valid UUID or omitted",
@@ -55,6 +55,10 @@ export function createItineraryTools(context: ItineraryToolContext) {
       description: z.string().optional(),
       tips: z.string().optional(),
       timeSlot: z.enum(["morning", "afternoon", "evening", "night"]).optional(),
+      activityType: z.enum(["accommodation", "transport", "dining", "attraction", "experience", "rest"]).optional(),
+      estCostIdr: z.number().int().min(0).optional(),
+      locationAddress: z.string().optional(),
+      bookingUrl: z.string().optional(),
     }).refine((value) => Boolean(value.itemId || value.currentTitle), {
       message: "itemId or currentTitle is required",
     }),
@@ -66,6 +70,10 @@ export function createItineraryTools(context: ItineraryToolContext) {
       description?: string;
       tips?: string;
       timeSlot?: "morning" | "afternoon" | "evening" | "night";
+      activityType?: "accommodation" | "transport" | "dining" | "attraction" | "experience" | "rest";
+      estCostIdr?: number;
+      locationAddress?: string;
+      bookingUrl?: string;
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
@@ -117,6 +125,10 @@ export function createItineraryTools(context: ItineraryToolContext) {
           ...(input.description ? { description: input.description } : {}),
           ...(input.tips ? { tips: input.tips } : {}),
           ...(input.timeSlot ? { time_slot: input.timeSlot } : {}),
+          ...(input.activityType ? { activity_type: input.activityType } : {}),
+          ...(typeof input.estCostIdr === "number" ? { est_cost_idr: input.estCostIdr } : {}),
+          ...(input.locationAddress ? { location_address: input.locationAddress } : {}),
+          ...(input.bookingUrl ? { booking_url: input.bookingUrl } : {}),
         })
         .eq("id", item.id);
 
@@ -141,6 +153,9 @@ export function createItineraryTools(context: ItineraryToolContext) {
       title: z.string(),
       description: z.string(),
       estCostIdr: z.number().int().min(0),
+      locationAddress: z.string().optional(),
+      tips: z.string().optional(),
+      bookingUrl: z.string().optional(),
     }),
     execute: async (input: {
       tripId?: string;
@@ -150,6 +165,9 @@ export function createItineraryTools(context: ItineraryToolContext) {
       title: string;
       description: string;
       estCostIdr: number;
+      locationAddress?: string;
+      tips?: string;
+      bookingUrl?: string;
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
 
@@ -167,6 +185,9 @@ export function createItineraryTools(context: ItineraryToolContext) {
         title: input.title,
         description: input.description,
         est_cost_idr: input.estCostIdr,
+        location_address: input.locationAddress ?? null,
+        tips: input.tips ?? null,
+        booking_url: input.bookingUrl ?? null,
         status: "draft",
         source: "manual_cs",
       });
@@ -298,14 +319,16 @@ export function createItineraryTools(context: ItineraryToolContext) {
       ]);
 
       const internalAlternatives =
-        internalResult.status === "fulfilled" ? (internalResult.value.data ?? []) : [];
+        internalResult.status === "fulfilled"
+          ? (internalResult.value.data ?? []).map((vendor) => ({
+              ...vendor,
+              source: "internal_db",
+              action_guide: `Vendor terverifikasi TravelYu. Gunakan swap_vendor dengan newVendorId: "${vendor.id}".`,
+            }))
+          : [];
 
       const tavilyResults =
         tavilyResult.status === "fulfilled" ? tavilyResult.value : [];
-
-      if (internalAlternatives.length > 0) {
-        return { ok: true, alternatives: internalAlternatives.slice(0, input.limit) };
-      }
 
       const guidePatterns = /(best|top|guide|list|review|reviews|where to eat|things to do|recommended|recommendations|itinerary|blogs?)/i;
       const bannedHostPatterns = /(tripadvisor|booking\.com|traveloka|expedia|agoda|yelp|michelin|klook|kkday|facebook\.com|instagram\.com|tiktok\.com|reddit\.com|quora\.com|medium\.com|blogspot\.com)/i;
@@ -333,9 +356,10 @@ export function createItineraryTools(context: ItineraryToolContext) {
         url: result.url,
         snippet: result.content,
         source: "web_search",
+        action_guide: `Hasil web baru. Gunakan update_itinerary_item (title: "${result.title}", bookingUrl: "${result.url}") untuk menerapkan.`,
       }));
 
-      const combined = [...webAlternatives];
+      const combined = [...internalAlternatives, ...webAlternatives];
       return { ok: true, alternatives: combined.slice(0, input.limit) };
     },
   },
@@ -359,6 +383,14 @@ export function createItineraryTools(context: ItineraryToolContext) {
       hotelChanged?: boolean;
     }) => {
       if (!isServiceConfigured()) return { ok: false, reason: "Supabase service role is not configured" };
+
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_REGEX.test(input.newVendorId)) {
+        return {
+          ok: false,
+          reason: `newVendorId '${input.newVendorId}' bukan UUID database vendor. Untuk alternatif dari web (web-...), gunakan update_itinerary_item.`,
+        };
+      }
 
       const resolvedTripId = input.tripId ?? context.tripId;
       if (!isSameTripScope(context, resolvedTripId)) {
@@ -496,9 +528,21 @@ export function createItineraryTools(context: ItineraryToolContext) {
     description: "Fetch weather forecast details for city/date",
     inputSchema: z.object({ city: z.string() }),
     execute: async ({ city }: { city: string }) => {
+      const month = new Date().getMonth();
+      const isRainy = month >= 10 || month <= 2;
+      const seasonalFallback = {
+        ok: true,
+        city,
+        summary: isRainy
+          ? "Tropis lembap, potensi hujan sore/malam hari (musim penghujan)"
+          : "Cerah berawan tropis, panas bersahabat (musim kemarau)",
+        temp: 29,
+        isSeasonalEstimate: true,
+      };
+
       const apiKey = process.env.OPENWEATHERMAP_API_KEY;
       if (!apiKey) {
-        return { ok: false, reason: "OPENWEATHERMAP_API_KEY is missing" };
+        return seasonalFallback;
       }
 
       try {
@@ -510,7 +554,7 @@ export function createItineraryTools(context: ItineraryToolContext) {
         );
 
         if (!response.ok) {
-          return { ok: false, reason: "Weather API request failed" };
+          return seasonalFallback;
         }
 
         const payload = await response.json();
@@ -519,11 +563,11 @@ export function createItineraryTools(context: ItineraryToolContext) {
         return {
           ok: true,
           city,
-          summary: next?.weather?.[0]?.description ?? "unknown",
-          temp: next?.main?.temp ?? null,
+          summary: next?.weather?.[0]?.description ?? seasonalFallback.summary,
+          temp: next?.main?.temp ?? seasonalFallback.temp,
         };
       } catch {
-        return { ok: false, reason: "Weather API request timed out" };
+        return seasonalFallback;
       }
     },
   },

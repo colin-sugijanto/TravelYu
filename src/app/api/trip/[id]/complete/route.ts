@@ -1,6 +1,6 @@
 import { revalidateTag } from "next/cache";
 
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { scheduleAwardPoints } from "@/lib/points";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -8,7 +8,7 @@ import { findTripByIdentifier } from "@/lib/trip-access";
 import type { IntakeData } from "@/types/domain";
 
 /**
- * POST /api/trip/[id]/complete — self-service trip completion by the trip owner.
+ * POST /api/trip/[id]/complete — self-service trip completion by the trip owner or admin.
  * Allowed if trip is 'approved' or 'active'.
  * Awards 100 points and schedules a post-trip notification.
  */
@@ -31,8 +31,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== appUser.id) {
-    return Response.json({ error: "Forbidden — only trip owner can complete a trip" }, { status: 403 });
+  if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
+    return Response.json({ error: "Forbidden — only trip owner or admin can complete a trip" }, { status: 403 });
   }
 
   if (trip.status === "completed") {
@@ -59,8 +59,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   revalidateTag(`trip:${trip.id}:items`, "max");
   revalidateTag("admin:metrics", "max");
 
-  // Award 100 points for completing a trip (fire-and-forget)
-  scheduleAwardPoints(appUser.id, 100, "trip_completed", trip.id);
+  // Award 100 points to the traveler who took the trip (fire-and-forget)
+  scheduleAwardPoints(trip.user_id, 100, "trip_completed", trip.id);
 
   // Schedule post-trip review notification
   const recipient = await resolveTripRecipient(trip.id as string);

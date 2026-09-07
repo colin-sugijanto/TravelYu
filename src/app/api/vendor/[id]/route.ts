@@ -1,4 +1,4 @@
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { findTripByIdentifier, isTripMember } from "@/lib/trip-access";
 
@@ -28,7 +28,7 @@ export async function GET(
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== appUser.id) {
+  if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     const member = await isTripMember(trip.id, appUser.id);
     if (!member) {
       return Response.json({ error: "Forbidden" }, { status: 403 });

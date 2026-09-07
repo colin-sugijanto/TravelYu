@@ -1,6 +1,6 @@
 export const APP_NAME = "TravelYu!";
 
-export const OPENROUTER_CHAT_MODEL = "deepseek/deepseek-v4-flash";
+export const OPENROUTER_CHAT_MODEL = "deepseek/deepseek-v4-flash-0731";
 
 export const GOOGLE_AI_STUDIO_MODEL = "gemini-3.1-flash-lite-preview";
 

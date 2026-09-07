@@ -55,6 +55,8 @@ export interface Trip {
   intake_data: IntakeData | null;
   selected_comparison_option: number | null;
   total_est_cost_idr: number | null;
+  trip_start_date?: string | null;
+  trip_end_date?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +94,7 @@ export interface ItineraryItem {
   source: "internal_db" | "web_search" | "provider_api" | "manual_cs";
   booking_url: string | null;
   booking_ref: string | null;
+  flagged_reason?: string | null;
 }
 
 export interface UserProfile {
@@ -107,6 +110,7 @@ export interface UserProfile {
   points_balance: number;
   lifetime_points: number;
   loyalty_tier: LoyaltyTier;
+  onboarding_completed?: boolean;
 }
 
 export interface VendorSummary {

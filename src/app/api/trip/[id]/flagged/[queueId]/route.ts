@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { resolveTripRecipient, scheduleNotification } from "@/lib/notifications";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findTripByIdentifier } from "@/lib/trip-access";
 
 export async function PATCH(
   request: Request,
@@ -33,11 +34,16 @@ export async function PATCH(
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const { data: trip } = await findTripByIdentifier<{ id: string }>(id, "id");
+  if (!trip) {
+    return Response.json({ error: "Trip not found" }, { status: 404 });
+  }
+
   const { data: queueItem } = await supabaseAdmin
     .from("cs_approval_queue")
     .select("id,trip_id,item_id,status,requested_change")
     .eq("id", queueId)
-    .eq("trip_id", id)
+    .eq("trip_id", trip.id)
     .maybeSingle();
 
   if (!queueItem) {

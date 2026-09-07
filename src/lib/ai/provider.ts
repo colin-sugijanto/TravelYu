@@ -12,6 +12,10 @@ export const googleAiStudio = createOpenAI({
 const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: openRouterApiKey,
+  headers: {
+    "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://travelyu.id",
+    "X-Title": "TravelYu",
+  },
 });
 
 const googleModelId = process.env.GOOGLE_AI_STUDIO_MODEL ?? GOOGLE_AI_STUDIO_MODEL;

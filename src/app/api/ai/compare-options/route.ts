@@ -2,12 +2,35 @@ import { generateText, tool } from "ai";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { model, hasConfiguredOpenRouter } from "@/lib/ai/openrouter";
 import { parseAiProviderError } from "@/lib/ai/errors";
 import { checkAiRateLimit } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findTripByIdentifier } from "@/lib/trip-access";
 import { validateRequest, compareOptionsSchema } from "@/lib/validators";
+
+const COMPARE_OPTIONS_SYSTEM_PROMPT = `
+Kamu adalah TravelYu AI Trip Strategist. Tugasmu adalah menganalisis profil intake traveler dan merancang TEPAT 3 opsi perbandingan trip yang sangat terdiferensiasi di Indonesia.
+
+## 3 Arketipe Wajib:
+1. **Opsi 1 — Smart Saver / Culture-Local**:
+   - Fokus efisiensi anggaran tanpa mengorbankan keamanan & keaslian pengalaman.
+   - Mengutamakan kuliner lokal legendaris/street food higienis, transportasi publik/sewa motor, spot wisata alam/budaya bebas biaya masuk besar.
+   - Estimasi budget ~75-85% dari patokan intake.
+
+2. **Opsi 2 — Balanced Explorer (Signature Comfort)**:
+   - Kombinasi ideal antara spot ikonik dan hidden gems santai.
+   - Transportasi sewa mobil/taksi online terjadwal, akomodasi hotel bintang 3-4 bernuansa lokal, resto keluarga/estetik terpercaya.
+   - Estimasi budget ~100% dari patokan intake.
+
+3. **Opsi 3 — Premium Indulgence / VIP Leisure**:
+   - Menghadirkan kenyamanan maksimal, relaksasi tanpa repot, dan pengalaman eksklusif.
+   - Private driver ber-AC, private boat charter, dinner sunset tepi pantai/fine dining, resort/boutique villa dengan fasilitas lengkap.
+   - Estimasi budget ~130-150% dari patokan intake.
+
+Semua rekomendasi wajib destinasi nyata dan logis di Indonesia. Selalu panggil tool save_comparison_options untuk menyimpan hasilnya.
+`;
 
 const compareTool = tool({
   description: "Persist generated trip comparison options",
@@ -176,16 +199,17 @@ export async function POST(request: Request) {
 
   const sanitizedSummary = body.intakeSummary.slice(0, 5000);
 
-  const { data: trip } = await supabaseAdmin
-    .from("trips")
-    .select("id,user_id,intake_data")
-    .eq("id", body.tripId)
-    .maybeSingle();
+  const { data: trip } = await findTripByIdentifier<{
+    id: string;
+    user_id: string;
+    intake_data: Record<string, unknown> | null;
+  }>(body.tripId, "id,user_id,intake_data");
+
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== appUser.id && appUser.role !== "admin" && appUser.role !== "super_admin") {
+  if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -198,24 +222,25 @@ export async function POST(request: Request) {
       },
       updated_at: new Date().toISOString(),
     })
-    .eq("id", body.tripId);
+    .eq("id", trip.id);
 
   try {
     const result = await generateText({
       model,
+      system: COMPARE_OPTIONS_SYSTEM_PROMPT,
       maxRetries: 2,
       prompt: `
 Generate 3 distinct itinerary comparison options.
 
-Trip ID: ${body.tripId}
+Trip ID: ${trip.id}
 Intake Summary: ${sanitizedSummary}
 
 Call save_comparison_options with structured options.
 
 Constraints:
-- Opsi 1 harus budget-focused.
-- Opsi 2 harus balanced.
-- Opsi 3 harus premium-experience.
+- Opsi 1 harus budget-focused (Smart Saver).
+- Opsi 2 harus balanced (Balanced Explorer).
+- Opsi 3 harus premium-experience (Premium Indulgence).
 - Semua destinasi wajib di Indonesia.
 `,
       tools: {
@@ -234,7 +259,7 @@ Constraints:
     });
 
     const fallbackOptions = buildFallbackComparisonOptions(sanitizedSummary);
-    const fallbackSave = await saveComparisonOptions(body.tripId, fallbackOptions);
+    const fallbackSave = await saveComparisonOptions(trip.id, fallbackOptions);
     if (fallbackSave.ok) {
       return Response.json({
         ok: true,

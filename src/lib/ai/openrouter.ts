@@ -11,6 +11,10 @@ export const hasConfiguredOpenRouter = hasOpenRouterKey;
 export const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: openrouterApiKey,
+  headers: {
+    "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://travelyu.id",
+    "X-Title": "TravelYu",
+  },
 });
 
 const openrouterModelId = process.env.OPENROUTER_MODEL ?? OPENROUTER_CHAT_MODEL;

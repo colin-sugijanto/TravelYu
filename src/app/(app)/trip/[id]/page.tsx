@@ -12,7 +12,7 @@ import { TripActionBanner } from "@/components/trip/trip-action-banner";
 import { GeneratingProgressClient } from "@/components/trip/generating-progress";
 import { Card, CardTitle } from "@/components/ui/card";
 import { WeatherBanner } from "@/components/weather/weather-banner";
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { getItineraryItems, getTripById } from "@/lib/data";
 import { formatTripName } from "@/lib/utils";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -222,8 +222,9 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
     redirect("/dashboard");
   }
 
+  const isAdmin = isAdminRole(appUser.role);
   const isOwner = trip.user_id === appUser.id;
-  if (!isOwner) {
+  if (!isAdmin && !isOwner) {
     const { data: member } = await supabaseAdmin
       .from("group_trip_members")
       .select("trip_id")

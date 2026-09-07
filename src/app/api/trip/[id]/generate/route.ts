@@ -1,6 +1,6 @@
 import { revalidateTag } from "next/cache";
-import { getCurrentAppUser } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
+import { findTripByIdentifier } from "@/lib/trip-access";
 import { POST as generateTripHandler } from "@/app/api/ai/generate-trip/route";
 
 export const maxDuration = 300;
@@ -13,17 +13,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabaseAdmin
-    .from("trips")
-    .select("id,user_id,intake_data,selected_comparison_option")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: trip } = await findTripByIdentifier<{
+    id: string;
+    user_id: string;
+    intake_data: Record<string, unknown> | null;
+    selected_comparison_option: number | null;
+  }>(id, "id,user_id,intake_data,selected_comparison_option");
 
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== appUser.id) {
+  if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 

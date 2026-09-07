@@ -1,5 +1,5 @@
 import { MemoryWall } from "@/components/memory/memory-wall";
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { getTripById, getTripPhotos } from "@/lib/data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
@@ -18,8 +18,9 @@ export default async function TripMemoryPage({ params }: { params: Promise<{ id:
     redirect("/dashboard");
   }
 
+  const isAdmin = isAdminRole(appUser.role);
   const isOwner = trip.user_id === appUser.id;
-  if (!isOwner) {
+  if (!isAdmin && !isOwner) {
     const { data: member } = await supabaseAdmin
       .from("group_trip_members")
       .select("trip_id")

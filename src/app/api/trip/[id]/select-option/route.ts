@@ -1,7 +1,8 @@
 import { revalidateTag } from "next/cache";
 
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findTripByIdentifier } from "@/lib/trip-access";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,19 +17,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: trip } = await supabaseAdmin.from("trips").select("id,user_id").eq("id", id).maybeSingle();
+  const { data: trip } = await findTripByIdentifier<{ id: string; user_id: string }>(id, "id,user_id");
   if (!trip) {
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== appUser.id) {
+  if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { error: clearError } = await supabaseAdmin
     .from("comparison_options")
     .update({ is_selected: false })
-    .eq("trip_id", id);
+    .eq("trip_id", trip.id);
   if (clearError) {
     return Response.json({ error: clearError.message }, { status: 500 });
   }
@@ -36,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { data: selectedRow, error: selectError } = await supabaseAdmin
     .from("comparison_options")
     .update({ is_selected: true })
-    .eq("trip_id", id)
+    .eq("trip_id", trip.id)
     .eq("option_number", body.optionNumber)
     .select("id")
     .maybeSingle();
@@ -50,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const [tripPreferenceResult, tripUpdateResult] = await Promise.all([
     supabaseAdmin.from("trip_preferences").upsert(
       {
-        trip_id: id,
+        trip_id: trip.id,
         selected_option_number: body.optionNumber,
         selected_at: new Date().toISOString(),
       },
@@ -62,7 +63,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         selected_comparison_option: body.optionNumber,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", id),
+      .eq("id", trip.id),
   ]);
 
   if (tripPreferenceResult.error) {
@@ -73,11 +74,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: tripUpdateResult.error.message }, { status: 500 });
   }
 
-  revalidateTag(`trip:${id}`, "max");
-  revalidateTag(`trip:${id}:comparison-options`, "max");
+  revalidateTag(`trip:${trip.id}`, "max");
+  revalidateTag(`trip:${trip.id}:comparison-options`, "max");
   if (trip.id !== id) {
-    revalidateTag(`trip:${trip.id}`, "max");
-    revalidateTag(`trip:${trip.id}:comparison-options`, "max");
+    revalidateTag(`trip:${id}`, "max");
+    revalidateTag(`trip:${id}:comparison-options`, "max");
   }
   revalidateTag("admin:metrics", "max");
 

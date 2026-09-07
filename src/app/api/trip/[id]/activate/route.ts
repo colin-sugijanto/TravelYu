@@ -1,6 +1,6 @@
 import { revalidateTag } from "next/cache";
 
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { findTripByIdentifier } from "@/lib/trip-access";
 import type { TripStatus } from "@/types/domain";
@@ -26,7 +26,7 @@ export async function PATCH(_: Request, { params }: { params: Promise<{ id: stri
     return Response.json({ error: "Trip not found" }, { status: 404 });
   }
 
-  if (trip.user_id !== appUser.id) {
+  if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -1,9 +1,23 @@
 import { generateText } from "ai";
 import { revalidateTag } from "next/cache";
 
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, isAdminRole } from "@/lib/auth";
 import { model } from "@/lib/ai/openrouter";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findTripByIdentifier } from "@/lib/trip-access";
+import { ActivityType, TimeSlot } from "@/types/domain";
+
+function normalizeTimeSlot(slot: string | undefined): TimeSlot {
+  const s = (slot ?? "").toLowerCase();
+  if (s === "morning" || s === "afternoon" || s === "evening" || s === "night") return s;
+  return "morning";
+}
+
+function normalizeActivityType(type: string | undefined): ActivityType {
+  const t = (type ?? "").toLowerCase();
+  const valid: ActivityType[] = ["accommodation", "transport", "dining", "attraction", "experience", "rest"];
+  return valid.includes(t as ActivityType) ? (t as ActivityType) : "attraction";
+}
 
 export async function POST(
   request: Request,
@@ -23,15 +37,15 @@ export async function POST(
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  // Ownership check
-  const { data: trip } = await supabaseAdmin
-    .from("trips")
-    .select("id,user_id,intake_data")
-    .eq("id", tripId)
-    .maybeSingle();
+  // Ownership check with slug/id support
+  const { data: trip } = await findTripByIdentifier<{
+    id: string;
+    user_id: string;
+    intake_data: Record<string, unknown> | null;
+  }>(tripId, "id,user_id,intake_data");
 
   if (!trip) return Response.json({ error: "Trip not found" }, { status: 404 });
-  if (trip.user_id !== appUser.id) {
+  if (trip.user_id !== appUser.id && !isAdminRole(appUser.role)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -50,7 +64,7 @@ export async function POST(
       prompt: `Regenerate the itinerary for Day ${body.dayNumber} of a trip to ${destination}.
 Vibe: ${vibe}, Pacing: ${pacing}, Budget: ${budget}.
 Return ONLY a JSON array (no markdown) of ${maxItemsPerDay} items for this day:
-[{"day": ${body.dayNumber}, "timeSlot": "morning|afternoon|evening|night", "activityType": "accommodation|transport|dining|attraction|experience|rest", "title": "...", "description": "...", "estCostIdr": 0, "locationAddress": "...", "locationLat": 0, "locationLng": 0, "source": "web_search"}]
+[{"day": ${body.dayNumber}, "timeSlot": "morning|afternoon|evening|night", "activityType": "accommodation|transport|dining|attraction|experience|rest", "title": "...", "description": "...", "estCostIdr": 0, "locationAddress": "...", "locationLat": 0, "locationLng": 0, "source": "web_search", "tips": "..."}]
 Must include at least 1 dining item. No fictional venues — use real Indonesian places.`,
     });
 
@@ -68,6 +82,7 @@ Must include at least 1 dining item. No fictional venues — use real Indonesian
       locationLat?: number;
       locationLng?: number;
       source?: string;
+      tips?: string;
     }>;
 
     if (!Array.isArray(newItems) || newItems.length === 0) {
@@ -78,16 +93,16 @@ Must include at least 1 dining item. No fictional venues — use real Indonesian
     await supabaseAdmin
       .from("itinerary_items")
       .delete()
-      .eq("trip_id", tripId)
+      .eq("trip_id", trip.id)
       .eq("day_number", body.dayNumber);
 
     // Insert new items
     const rows = newItems.map((item, idx) => ({
-      trip_id: tripId,
+      trip_id: trip.id,
       day_number: body.dayNumber,
-      time_slot: item.timeSlot,
+      time_slot: normalizeTimeSlot(item.timeSlot),
       sort_order: idx + 1,
-      activity_type: item.activityType,
+      activity_type: normalizeActivityType(item.activityType),
       title: item.title,
       description: item.description,
       est_cost_idr: item.estCostIdr ?? 0,
@@ -97,11 +112,12 @@ Must include at least 1 dining item. No fictional venues — use real Indonesian
       booking_url: null,
       status: "draft",
       source: item.source ?? "web_search",
+      tips: item.tips ?? null,
     }));
 
     await supabaseAdmin.from("itinerary_items").insert(rows);
 
-    revalidateTag(`trip:${tripId}:items`, "max");
+    revalidateTag(`trip:${trip.id}:items`, "max");
 
     return Response.json({ ok: true, itemCount: rows.length });
   } catch (err) {
